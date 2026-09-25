@@ -25,7 +25,7 @@ const STATUS_BADGE_STYLES: Record<string, { bg: string; text: string; ring: stri
 
 export function RecentDispatchOrdersSection({
   orders,
-  totalOrdersCount = 1942,
+  totalOrdersCount = 0,
 }: RecentDispatchOrdersSectionProps) {
   const [filter, setFilter] = useState<"all" | "pending" | "paid" | "shipped">("all");
 

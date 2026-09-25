@@ -68,7 +68,7 @@ export function DashboardKpiCards({ stats }: DashboardKpiCardsProps) {
           </div>
           <div className="mt-2.5 flex items-center gap-1.5 text-xs text-stone-500">
             <span className="inline-block h-1.5 w-1.5 rounded-full bg-indigo-500"></span>
-            <span className="truncate">Sweets, Savouries & Millets</span>
+            <span className="truncate">{stats.categoriesBadgeText || "Store categories active"}</span>
           </div>
         </div>
       </div>
@@ -91,7 +91,11 @@ export function DashboardKpiCards({ stats }: DashboardKpiCardsProps) {
           </div>
           <div className="mt-2.5 flex items-center gap-1.5 text-xs font-semibold text-emerald-600">
             <TrendingUp className="h-3.5 w-3.5 shrink-0" />
-            <span>+{stats.customerGrowthPercent ?? 14.2}% from last month</span>
+            <span>
+              {stats.customerGrowthPercent !== undefined
+                ? `${stats.customerGrowthPercent >= 0 ? "+" : ""}${stats.customerGrowthPercent}% vs prev period`
+                : "Active customer base"}
+            </span>
           </div>
         </div>
       </div>
@@ -113,8 +117,8 @@ export function DashboardKpiCards({ stats }: DashboardKpiCardsProps) {
             </span>
           </div>
           <div className="mt-2.5 flex items-center gap-1.5 text-xs font-medium text-stone-600">
-            <span className="font-bold text-emerald-600">{stats.fulfillmentRatePercent ?? 98.4}%</span>
-            <span>fulfillment success rate</span>
+            <span className="font-bold text-emerald-600">{stats.fulfillmentRatePercent ?? 100}%</span>
+            <span>fulfillment rate</span>
           </div>
         </div>
       </div>
@@ -137,9 +141,11 @@ export function DashboardKpiCards({ stats }: DashboardKpiCardsProps) {
           </div>
           <div className="mt-2.5 flex items-center gap-1.5 text-xs font-semibold text-emerald-600">
             <span className="rounded-md bg-emerald-50 px-1.5 py-0.5 ring-1 ring-emerald-600/20">
-              +{stats.revenueGrowthPercent ?? 18.6}%
+              {stats.revenueGrowthPercent !== undefined
+                ? `${stats.revenueGrowthPercent >= 0 ? "+" : ""}${stats.revenueGrowthPercent}%`
+                : "0%"}
             </span>
-            <span className="text-stone-500 font-medium">vs previous month</span>
+            <span className="text-stone-500 font-medium">vs previous period</span>
           </div>
         </div>
       </div>
@@ -163,7 +169,7 @@ export function DashboardKpiCards({ stats }: DashboardKpiCardsProps) {
           </div>
           <div className="mt-2.5 flex items-center gap-1.5 text-xs font-semibold text-amber-700">
             <AlertCircle className="h-3.5 w-3.5 shrink-0 text-amber-600" />
-            <span className="truncate">{stats.pendingOrdersNotice || "Requires packing & depot scan"}</span>
+            <span className="truncate">{stats.pendingOrdersNotice || "All orders processed"}</span>
           </div>
         </div>
       </div>
@@ -187,7 +193,7 @@ export function DashboardKpiCards({ stats }: DashboardKpiCardsProps) {
           </div>
           <div className="mt-2.5 flex items-center gap-1.5 text-xs font-semibold text-rose-700">
             <span className="h-2 w-2 shrink-0 rounded-full bg-rose-500 animate-pulse"></span>
-            <span className="truncate">{stats.stockWarningsNotice || "3 critical re-orders needed"}</span>
+            <span className="truncate">{stats.stockWarningsNotice || "Inventory levels optimal"}</span>
           </div>
         </div>
       </div>
@@ -211,7 +217,11 @@ export function DashboardKpiCards({ stats }: DashboardKpiCardsProps) {
           </div>
           <div className="mt-2.5 flex items-center gap-1.5 text-xs font-semibold text-stone-700">
             <span className="text-emerald-700 font-bold">{formatPrice(stats.todayRevenue)}</span>
-            <span className="text-stone-500 font-normal">collected (+{stats.todayAvgComparison ?? 8}% vs avg)</span>
+            <span className="text-stone-500 font-normal">
+              {stats.todayAvgComparison !== undefined
+                ? `(${stats.todayAvgComparison >= 0 ? "+" : ""}${stats.todayAvgComparison}% vs daily avg)`
+                : ""}
+            </span>
           </div>
         </div>
       </div>

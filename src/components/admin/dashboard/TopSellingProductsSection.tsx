@@ -4,12 +4,54 @@ import * as React from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { ArrowRight, Sparkles, Package } from "lucide-react";
-import { formatPrice } from "@/lib/utils";
+import { formatPrice, getImageUrl } from "@/lib/utils";
 import type { TopSellingProduct } from "@/features/dashboard/types";
 import { cn } from "@/lib/utils";
 
 interface TopSellingProductsSectionProps {
   products: TopSellingProduct[];
+}
+
+function ProductThumbnail({
+  src,
+  alt,
+  index,
+}: {
+  src?: string | null;
+  alt: string;
+  index: number;
+}) {
+  const [imgError, setImgError] = React.useState(false);
+  const normalizedSrc = getImageUrl(src);
+
+  const hasValidSrc = Boolean(
+    src &&
+      src.trim() !== "" &&
+      src.trim() !== "null" &&
+      src.trim() !== "undefined" &&
+      src.trim() !== "/images/placeholder.png" &&
+      !imgError
+  );
+
+  return (
+    <div className="relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-stone-200 bg-amber-50/60 shadow-2xs">
+      {hasValidSrc ? (
+        <img
+          src={normalizedSrc}
+          alt=""
+          onError={() => setImgError(true)}
+          className="h-full w-full object-cover"
+        />
+      ) : (
+        <div className="flex flex-col items-center justify-center text-amber-700 font-black text-xs">
+          <Package className="h-5 w-5 text-amber-600/80" />
+        </div>
+      )}
+      <span className="absolute bottom-0 right-0 z-10 rounded-tl-md bg-stone-900/85 px-1 py-0.2 text-[9px] font-bold text-white shadow-xs">
+        #{index + 1}
+      </span>
+    </div>
+  );
 }
 
 export function TopSellingProductsSection({ products }: TopSellingProductsSectionProps) {
@@ -52,22 +94,7 @@ export function TopSellingProductsSection({ products }: TopSellingProductsSectio
                 <div key={item.id} className="group py-3 first:pt-0 last:pb-0 flex items-center justify-between gap-3">
                   {/* Left: Thumbnail + Name/SKU */}
                   <div className="flex items-center gap-3 min-w-0">
-                    <div className="relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-stone-200 bg-amber-50/50 shadow-2xs">
-                      {item.image ? (
-                        <img
-                          src={item.image}
-                          alt={item.name}
-                          className="h-full w-full object-cover"
-                        />
-                      ) : (
-                        <div className="flex flex-col items-center justify-center text-amber-700 font-black text-xs">
-                          <Package className="h-5 w-5 text-amber-600" />
-                        </div>
-                      )}
-                      <span className="absolute bottom-0 right-0 rounded-tl-md bg-stone-900/80 px-1 py-0.2 text-[9px] font-bold text-white">
-                        #{index + 1}
-                      </span>
-                    </div>
+                    <ProductThumbnail src={item.image} alt={item.name} index={index} />
 
                     <div className="min-w-0">
                       <h3 className="truncate text-xs sm:text-sm font-bold text-stone-900 group-hover:text-emerald-700 transition-colors">
