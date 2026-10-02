@@ -449,6 +449,7 @@ export function VariantReviewsCard({
                             src={review.customer.avatar}
                             alt={review.customer.name || "Customer"}
                             fill
+                            sizes="36px"
                             className="object-cover"
                           />
                         ) : (
@@ -511,6 +512,7 @@ export function VariantReviewsCard({
                                 src={imgUrl}
                                 alt={`Customer review photo ${imgIdx + 1}`}
                                 fill
+                                sizes="56px"
                                 className="object-cover group-hover:scale-105 transition-transform"
                               />
                             </button>
@@ -676,6 +678,7 @@ export function VariantReviewsCard({
                 src={enlargedImage}
                 alt="Enlarged customer photo"
                 fill
+                sizes="(max-width: 768px) 100vw, 550px"
                 className="object-contain"
               />
             </div>

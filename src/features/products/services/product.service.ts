@@ -55,7 +55,6 @@ async function formatAdminProductResponse(
 
   const hsnUuid = product.product_hsn_codes?.uuid ?? null;
   const hsnCodeName =
-    product.product_hsn_codes?.description ||
     product.product_hsn_codes?.code ||
     null;
 

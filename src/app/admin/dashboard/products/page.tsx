@@ -168,6 +168,7 @@ export default function AdminProductsPage() {
                 src={imageUrl}
                 alt={row.original.name}
                 fill
+                sizes="40px"
                 className="object-cover"
               />
             ) : (

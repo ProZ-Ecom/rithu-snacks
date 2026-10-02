@@ -531,6 +531,7 @@ export default function AdminProductDetailsPage() {
                   src={primaryProductImage}
                   alt={product.name}
                   fill
+                  sizes="84px"
                   className="object-cover"
                 />
               ) : (
@@ -937,6 +938,7 @@ export default function AdminProductDetailsPage() {
                                   src={variant.primaryImage}
                                   alt={variant.variantName}
                                   fill
+                                  sizes="36px"
                                   className="object-cover"
                                 />
                               ) : (

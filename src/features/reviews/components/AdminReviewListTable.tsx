@@ -176,6 +176,7 @@ export function AdminReviewListTable({
                   src={customer.avatar}
                   alt={customer.name || "Customer"}
                   fill
+                  sizes="32px"
                   className="object-cover"
                 />
               ) : (

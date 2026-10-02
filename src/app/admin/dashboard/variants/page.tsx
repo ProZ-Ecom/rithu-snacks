@@ -239,6 +239,7 @@ export default function AdminVariantsPage() {
                 src={imageUrl}
                 alt={row.original.variantName || "Variant"}
                 fill
+                sizes="48px"
                 className="object-cover"
               />
             ) : (

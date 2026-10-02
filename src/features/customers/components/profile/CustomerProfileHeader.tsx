@@ -265,6 +265,7 @@ export function CustomerProfileHeader({
                 src={customer.profileImage}
                 alt={customer.name || "Customer"}
                 fill
+                sizes="(max-width: 640px) 64px, 88px"
                 className="object-cover"
               />
             ) : (

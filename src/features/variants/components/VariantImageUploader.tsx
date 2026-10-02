@@ -323,6 +323,7 @@ export function VariantImageUploader({
                   src={img.imageUrl}
                   alt="Variant Image"
                   fill
+                  sizes="(max-width: 640px) 50vw, (max-width: 1024px) 25vw, 200px"
                   className="object-cover"
                 />
                 {img.isPrimary ? (
@@ -396,6 +397,7 @@ export function VariantImageUploader({
                     src={img.previewUrl}
                     alt="Pending Image"
                     fill
+                    sizes="(max-width: 640px) 50vw, (max-width: 1024px) 25vw, 200px"
                     className="object-cover"
                   />
                   <button

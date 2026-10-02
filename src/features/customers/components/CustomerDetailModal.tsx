@@ -76,6 +76,7 @@ export function CustomerDetailModal({
                 src={customer.profileImage}
                 alt={customer.name}
                 fill
+                sizes="64px"
                 className="object-cover"
               />
             ) : (

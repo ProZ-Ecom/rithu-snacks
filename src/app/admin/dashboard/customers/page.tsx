@@ -173,6 +173,7 @@ export default function AdminCustomersPage() {
                   src={item.profileImage}
                   alt={item.name}
                   fill
+                  sizes="40px"
                   className="object-cover"
                 />
               ) : (

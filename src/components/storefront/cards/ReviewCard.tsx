@@ -42,6 +42,7 @@ export function ReviewCard({ review }: ReviewCardProps) {
             src={review.image}
             alt={review.name}
             fill
+            sizes="80px"
             className="
               bg-white
               rounded-full
