@@ -12,6 +12,8 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { AdminBreadcrumb } from "@/components/admin/AdminBreadcrumb";
 import { AdminPageHeader, AdminContent } from "@/components/admin/AdminPageHeader";
 import { DataTable } from "@/components/admin/data-table/DataTable";
+import { ExportExcelButton } from "@/components/admin/ExportExcelButton";
+import { EXPORT_PRESETS } from "@/lib/export-presets";
 import { StatsCard } from "@/components/admin/StatsCard";
 import { Button } from "@/components/ui/button";
 import { SearchInput } from "@/components/ui/search-input";
@@ -269,14 +271,24 @@ export default function AdminStaffPage() {
           )}
         </div>
 
-        <Button
-          type="button"
-          onClick={handleOpenCreateModal}
-          className="h-10 rounded-xl bg-secondary-600 px-4 text-sm font-semibold text-white hover:bg-secondary-700 shadow-xs cursor-pointer shrink-0"
-        >
-          <Plus className="mr-2 h-4 w-4" />
-          Create Staff
-        </Button>
+        <div className="flex items-center gap-2.5 flex-wrap shrink-0">
+          <ExportExcelButton
+            data={staffList}
+            filename="staff_members"
+            sheetName="Staff"
+            columns={EXPORT_PRESETS.staff}
+            className="h-10"
+          />
+
+          <Button
+            type="button"
+            onClick={handleOpenCreateModal}
+            className="h-10 rounded-xl bg-secondary-600 px-4 text-sm font-semibold text-white hover:bg-secondary-700 shadow-xs cursor-pointer"
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            Create Staff
+          </Button>
+        </div>
       </div>
 
       {/* Main Content */}

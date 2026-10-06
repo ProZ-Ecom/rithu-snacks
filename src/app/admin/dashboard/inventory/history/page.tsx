@@ -11,6 +11,8 @@ import {
   AdminContent,
 } from "@/components/admin/AdminPageHeader";
 import { DataTable } from "@/components/admin/data-table/DataTable";
+import { ExportExcelButton } from "@/components/admin/ExportExcelButton";
+import { EXPORT_PRESETS } from "@/lib/export-presets";
 import { ClearFiltersButton } from "@/components/common/clear-filters-button";
 import { Select } from "@/components/ui/select";
 import { useInventoryTransactions } from "@/features/inventory/hooks";
@@ -111,7 +113,7 @@ export default function InventoryHistoryPage() {
               onChange={(e) => setInventoryId(e.target.value)}
             />
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <label className="text-xs font-semibold text-neutral-600 whitespace-nowrap">Filter by type:</label>
             <Select
               className="w-40"
@@ -133,6 +135,13 @@ export default function InventoryHistoryPage() {
                 { value: "DAMAGE", label: "Damage" },
                 { value: "TRANSFER", label: "Transfer" },
               ]}
+            />
+
+            <ExportExcelButton
+              data={transactionData}
+              filename="inventory_history"
+              sheetName="Inventory History"
+              columns={EXPORT_PRESETS.inventoryHistory}
             />
           </div>
 

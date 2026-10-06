@@ -16,6 +16,9 @@ import { useProducts } from "@/features/products/hooks";
 import { useUnits } from "@/features/units/hooks";
 import { DataTable } from "@/components/admin/data-table/DataTable";
 import { BulkActionsBar } from "@/components/admin/data-table/BulkActionsBar";
+import { ExportExcelButton } from "@/components/admin/ExportExcelButton";
+import { exportToExcel } from "@/lib/excel-export";
+import { EXPORT_PRESETS } from "@/lib/export-presets";
 import {
   AdminPageHeader,
   AdminContent,
@@ -546,13 +549,20 @@ export default function AdminVariantsPage() {
                 </button>
               </div>
 
+              <ExportExcelButton
+                data={variants}
+                filename="variants"
+                sheetName="Variants"
+                columns={EXPORT_PRESETS.variants}
+              />
+
               <Button
                 onClick={() => {
                   setCreateStep(1);
                   setCreatedVariant(null);
                   setIsCreateOpen(true);
                 }}
-                className="h-11 rounded-xl bg-[var(--color-secondary-600)] px-5 text-sm font-semibold text-white hover:bg-[var(--color-secondary-700)] cursor-pointer"
+                className="h-11 rounded-xl bg-[var(--color-secondary-600)] px-5 text-sm font-semibold text-white hover:bg-[var(--color-secondary-700)] cursor-pointer shadow-xs"
               >
                 <Plus className="mr-2 h-4 w-4" />
                 Add Item
@@ -569,6 +579,14 @@ export default function AdminVariantsPage() {
               onClearSelection={() => {
                 setSelectedRowIds({});
                 setSelectedRows([]);
+              }}
+              onExport={() => {
+                exportToExcel({
+                  filename: "selected_variants",
+                  sheetName: "Selected Variants",
+                  data: selectedRows,
+                  columns: EXPORT_PRESETS.variants,
+                });
               }}
               onDelete={() => setIsBulkDeleteOpen(true)}
               isDeleting={bulkDeleteMutation.isPending}

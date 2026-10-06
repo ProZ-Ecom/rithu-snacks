@@ -17,6 +17,8 @@ import {
   Calendar,
 } from "lucide-react";
 import { DataTable } from "@/components/admin/data-table/DataTable";
+import { ExportExcelButton } from "@/components/admin/ExportExcelButton";
+import { EXPORT_PRESETS } from "@/lib/export-presets";
 import { LoadingState } from "@/components/ui/loading-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { Button } from "@/components/ui/button";
@@ -404,6 +406,13 @@ export function StaffDeliveryListTable({
           >
             <RotateCcw className={`h-3.5 w-3.5 ${isFetching ? "animate-spin" : ""}`} />
           </Button>
+
+          <ExportExcelButton
+            data={displayedDeliveries}
+            filename="my_deliveries"
+            sheetName="Deliveries"
+            columns={EXPORT_PRESETS.deliveryOrders}
+          />
         </div>
 
         <div className="flex flex-wrap items-center gap-2">

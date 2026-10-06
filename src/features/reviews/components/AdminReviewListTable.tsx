@@ -16,6 +16,8 @@ import {
   XCircle,
 } from "lucide-react";
 import { DataTable } from "@/components/admin/data-table/DataTable";
+import { ExportExcelButton } from "@/components/admin/ExportExcelButton";
+import { EXPORT_PRESETS } from "@/lib/export-presets";
 import { LoadingState } from "@/components/ui/loading-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { Button } from "@/components/ui/button";
@@ -391,6 +393,14 @@ export function AdminReviewListTable({
               className={`w-3.5 h-3.5 ${isFetching ? "animate-spin text-secondary-600" : ""}`}
             />
           </Button>
+
+          <ExportExcelButton
+            data={reviews}
+            filename="reviews"
+            sheetName="Reviews"
+            columns={EXPORT_PRESETS.reviews}
+            className="h-9.5"
+          />
 
           {hasActiveFilters && <ClearFiltersButton onClick={handleClearFilters} className="h-9.5" />}
         </div>

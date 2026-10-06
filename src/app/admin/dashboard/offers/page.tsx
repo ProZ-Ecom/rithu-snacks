@@ -12,6 +12,8 @@ import { ErrorState } from "@/components/ui/error-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/forms/label";
 import { DataTable } from "@/components/admin/data-table/DataTable";
+import { ExportExcelButton } from "@/components/admin/ExportExcelButton";
+import { EXPORT_PRESETS } from "@/lib/export-presets";
 import { AdminTableSkeleton } from "@/components/admin/AdminTableSkeleton";
 import {
   AdminContent,
@@ -400,17 +402,26 @@ export default function AdminOffersPage() {
                 {hasActiveFilters && <ClearFiltersButton onClick={clearFilters} />}
               </div>
 
-              <Button
-                type="button"
-                onClick={() => {
-                  setFormError(null);
-                  setIsCreateOpen(true);
-                }}
-                className="h-11 rounded-xl bg-[var(--color-secondary-600)] px-5 text-sm font-semibold text-white hover:bg-[var(--color-secondary-700)] cursor-pointer self-start sm:self-auto"
-              >
-                <Plus className="mr-2 h-4 w-4" />
-                Create Offer
-              </Button>
+              <div className="flex items-center gap-2.5 flex-wrap self-start sm:self-auto">
+                <ExportExcelButton
+                  data={offers}
+                  filename="offers"
+                  sheetName="Offers"
+                  columns={EXPORT_PRESETS.offers}
+                />
+
+                <Button
+                  type="button"
+                  onClick={() => {
+                    setFormError(null);
+                    setIsCreateOpen(true);
+                  }}
+                  className="h-11 rounded-xl bg-[var(--color-secondary-600)] px-5 text-sm font-semibold text-white hover:bg-[var(--color-secondary-700)] cursor-pointer shadow-xs"
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  Create Offer
+                </Button>
+              </div>
             </div>
 
             {/* Filter Row */}
