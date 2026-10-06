@@ -61,7 +61,7 @@ export function DashboardHeader({
       {/* Action Controls & Filters */}
       <div className="flex flex-col sm:flex-row sm:items-center gap-2.5">
         {/* View State Controls (Live, Skeleton, Empty, Error) */}
-        <div className="hidden xl:flex items-center rounded-xl bg-stone-100/80 p-1 border border-stone-200/80">
+        {/* <div className="hidden xl:flex items-center rounded-xl bg-stone-100/80 p-1 border border-stone-200/80">
           {VIEW_STATE_OPTIONS.map((item) => {
             const isActive = viewState === item.id;
             return (
@@ -80,7 +80,7 @@ export function DashboardHeader({
               </button>
             );
           })}
-        </div>
+        </div> */}
 
         {/* Period Selector Tabs */}
         <div className="flex flex-wrap items-center gap-1 rounded-xl bg-stone-100/90 p-1 border border-stone-200/80 shadow-2xs">

@@ -9,6 +9,8 @@ import {
 } from "@/features/hsn-codes/hooks";
 import { useGstRates } from "@/features/gst-rates/hooks/use-gst-rates";
 import { DataTable } from "@/components/admin/data-table/DataTable";
+import { ExportExcelButton } from "@/components/admin/ExportExcelButton";
+import { EXPORT_PRESETS } from "@/lib/export-presets";
 import {
   AdminPageHeader,
   AdminContent,
@@ -155,13 +157,22 @@ export default function AdminHsnCodesPage() {
               className="w-full max-w-md"
             />
 
-            <Button
-              onClick={() => setIsCreateOpen(true)}
-              className="h-11 rounded-xl bg-[var(--color-secondary-600)] px-5 text-sm font-semibold text-white hover:bg-[var(--color-secondary-700)]"
-            >
-              <Plus className="mr-2 h-4 w-4" />
-              Add HSN Code
-            </Button>
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <ExportExcelButton
+                data={hsnCodes}
+                filename="hsn_codes"
+                sheetName="HSN Codes"
+                columns={EXPORT_PRESETS.hsnCodes}
+              />
+
+              <Button
+                onClick={() => setIsCreateOpen(true)}
+                className="h-11 rounded-xl bg-[var(--color-secondary-600)] px-5 text-sm font-semibold text-white hover:bg-[var(--color-secondary-700)] shadow-xs"
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                Add HSN Code
+              </Button>
+            </div>
           </div>
 
           <div className="mt-6 flex-1 min-h-0 min-w-0 flex flex-col">

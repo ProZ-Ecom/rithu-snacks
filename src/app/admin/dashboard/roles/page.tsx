@@ -11,6 +11,8 @@ import {
   usePermissions,
 } from "@/features/roles/hooks";
 import { DataTable } from "@/components/admin/data-table/DataTable";
+import { ExportExcelButton } from "@/components/admin/ExportExcelButton";
+import { EXPORT_PRESETS } from "@/lib/export-presets";
 import { AdminPageHeader, AdminContent } from "@/components/admin/AdminPageHeader";
 import { AdminTableSkeleton } from "@/components/admin/AdminTableSkeleton";
 import { ErrorState } from "@/components/ui/error-state";
@@ -233,14 +235,23 @@ export default function AdminRolesPage() {
               className="w-full max-w-md"
             />
 
-            <Button
-              type="button"
-              onClick={() => handleOpenModal()}
-              className="h-11 rounded-xl bg-[var(--color-secondary-600)] px-5 text-sm font-semibold text-white hover:bg-[var(--color-secondary-700)] cursor-pointer"
-            >
-              <Plus className="mr-2 h-4 w-4" />
-              Add Role
-            </Button>
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <ExportExcelButton
+                data={filteredRoles}
+                filename="roles"
+                sheetName="Roles"
+                columns={EXPORT_PRESETS.roles}
+              />
+
+              <Button
+                type="button"
+                onClick={() => handleOpenModal()}
+                className="h-11 rounded-xl bg-[var(--color-secondary-600)] px-5 text-sm font-semibold text-white hover:bg-[var(--color-secondary-700)] cursor-pointer shadow-xs"
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                Add Role
+              </Button>
+            </div>
           </div>
 
           {/* Table Container */}

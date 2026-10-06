@@ -12,14 +12,9 @@ export interface VerifyPaymentResult {
   orderId: string;
 }
 
-export interface InitiateRedirectResult {
-  paymentUrl: string;
-  token: string;
-}
-
 export const customerPaymentApi = {
   /**
-   * Create Razorpay order for an existing pending customer order
+   * Create Razorpay order for active cart or pending customer order
    */
   async createRazorpayOrder(
     payload: CreateRazorpayOrderInput
@@ -35,7 +30,7 @@ export const customerPaymentApi = {
   },
 
   /**
-   * Verify Razorpay payment signature after customer completes payment in modal
+   * Verify Razorpay payment signature after customer completes payment in in-built modal
    */
   async verifyPayment(
     payload: VerifyRazorpayPaymentInput
@@ -49,24 +44,6 @@ export const customerPaymentApi = {
     }
     return response.data;
   },
-
-  /**
-   * Initiate a redirect-based payment.
-   * Returns the URL to redirect the customer to (payment app).
-   */
-  async initiateRedirectPayment(payload: {
-    shippingAddressId: string;
-    billingAddressId?: string;
-    notes?: string;
-  }): Promise<InitiateRedirectResult> {
-    const response = await apiClient.post<InitiateRedirectResult>(
-      "/api/payment/initiate-redirect",
-      payload
-    );
-    if (!response.data) {
-      throw new Error(response.message || "Failed to initiate redirect payment");
-    }
-    return response.data;
-  },
 };
+
 

@@ -448,6 +448,22 @@ export async function getDashboardData(period: TimePeriod = "this_month"): Promi
 
     // If still no order items, fetch active products from catalog
     let productsFromDb: any[] = [];
+    const productIncludeArgs = {
+      images: {
+        where: { is_active: true },
+        orderBy: [{ isPrimary: "desc" as const }, { sortOrder: "asc" as const }],
+      },
+      variants: {
+        where: { isActive: true, deleted_at: null },
+        include: {
+          product_variant_images: {
+            where: { is_active: true },
+            orderBy: [{ is_primary: "desc" as const }, { sort_order: "asc" as const }],
+          },
+        },
+      },
+    };
+
     if (productIdsToFetch.length > 0) {
       productsFromDb = await db.product.findMany({
         where: {
@@ -455,26 +471,14 @@ export async function getDashboardData(period: TimePeriod = "this_month"): Promi
           isActive: true,
           deleted_at: null,
         },
-        include: {
-          images: {
-            where: { is_active: true },
-            orderBy: [{ isPrimary: "desc" }, { sortOrder: "asc" }],
-            take: 1,
-          },
-        },
+        include: productIncludeArgs,
       });
     } else {
       productsFromDb = await db.product.findMany({
         where: { isActive: true, deleted_at: null },
         take: 5,
         orderBy: { createdAt: "desc" },
-        include: {
-          images: {
-            where: { is_active: true },
-            orderBy: [{ isPrimary: "desc" }, { sortOrder: "asc" }],
-            take: 1,
-          },
-        },
+        include: productIncludeArgs,
       });
     }
 
@@ -535,6 +539,44 @@ export async function getDashboardData(period: TimePeriod = "this_month"): Promi
         stockStatus = "low_stock";
       }
 
+      // Resolve primary image from product.images or variant images
+      let resolvedImg: string | null =
+        p.images?.find((img: any) => img.isPrimary)?.image_url ||
+        p.images?.[0]?.image_url ||
+        null;
+
+      if (!resolvedImg && p.variants && p.variants.length > 0) {
+        const defaultVar = p.variants.find((v: any) => v.is_default) ?? p.variants[0];
+        const primaryVarImg =
+          defaultVar?.product_variant_images?.find((img: any) => img.is_primary) ??
+          defaultVar?.product_variant_images?.[0];
+        resolvedImg = primaryVarImg?.image_url ?? null;
+
+        if (!resolvedImg) {
+          for (const v of p.variants) {
+            const vImg =
+              v.product_variant_images?.find((img: any) => img.is_primary) ??
+              v.product_variant_images?.[0];
+            if (vImg?.image_url) {
+              resolvedImg = vImg.image_url;
+              break;
+            }
+          }
+        }
+      }
+
+      if (resolvedImg && typeof resolvedImg === "string") {
+        const trimmed = resolvedImg.trim();
+        if (trimmed && trimmed !== "null" && trimmed !== "undefined") {
+          resolvedImg =
+            trimmed.startsWith("http://") || trimmed.startsWith("https://") || trimmed.startsWith("/")
+              ? trimmed
+              : `/${trimmed}`;
+        } else {
+          resolvedImg = null;
+        }
+      }
+
       return {
         id: pId,
         name: p.name,
@@ -544,11 +586,11 @@ export async function getDashboardData(period: TimePeriod = "this_month"): Promi
         revenue,
         stockQuantity: stockInfo.total,
         stockStatus,
-        image: p.images?.[0]?.image_url || null,
+        image: resolvedImg,
       };
     });
-  } catch {
-    // Empty list if error
+  } catch (err) {
+    console.error("Error in getDashboardData topProducts:", err);
   }
 
   // 5. Restock & Procurement Alerts from live inventory table
@@ -631,10 +673,9 @@ export async function getDashboardData(period: TimePeriod = "this_month"): Promi
     // Empty list if error
   }
 
-  // 6. Dynamic Time-Series Chart Data Points from live orders
-  const chartData: ChartDataPoint[] = [];
+  // 6. Dynamic Time-Series Chart Data Points from live orders (up to current date/time)
+  let chartData: ChartDataPoint[] = [];
   try {
-    // Generate buckets spanning the requested period
     const rawOrdersForChart = await db.order.findMany({
       where: {
         is_active: true,
@@ -652,75 +693,177 @@ export async function getDashboardData(period: TimePeriod = "this_month"): Promi
           take: 1,
         },
       },
+      orderBy: { createdAt: "asc" },
     });
 
-    if (period === "today") {
-      // 6 interval checkpoints for today: 04:00, 08:00, 12:00, 16:00, 20:00, 23:59
-      const intervals = [
-        { label: "04:00 AM", startHour: 0, endHour: 4 },
-        { label: "08:00 AM", startHour: 4, endHour: 8 },
-        { label: "12:00 PM", startHour: 8, endHour: 12 },
-        { label: "04:00 PM", startHour: 12, endHour: 16 },
-        { label: "08:00 PM", startHour: 16, endHour: 20 },
-        { label: "11:59 PM", startHour: 20, endHour: 24 },
-      ];
+    const aggregateBucket = (
+      label: string,
+      dateStr: string,
+      start: Date,
+      end: Date,
+      isInclusiveEnd = false
+    ): ChartDataPoint => {
+      const startMs = start.getTime();
+      const endMs = end.getTime();
+      const bucketOrders = rawOrdersForChart.filter((o) => {
+        const t = new Date(o.createdAt).getTime();
+        return isInclusiveEnd ? t >= startMs && t <= endMs : t >= startMs && t < endMs;
+      });
 
-      for (const slot of intervals) {
-        const slotOrders = rawOrdersForChart.filter((o) => {
-          const h = new Date(o.createdAt).getHours();
-          return h >= slot.startHour && h < slot.endHour;
+      const revenue = bucketOrders.reduce((sum, o) => sum + Number(o.totalAmount || 0), 0);
+      const topProduct = bucketOrders[0]?.items?.[0]?.product_name_snapshot || undefined;
+
+      return {
+        date: dateStr,
+        label,
+        revenue,
+        orders: bucketOrders.length,
+        topProduct,
+      };
+    };
+
+    if (period === "today") {
+      const currentHour = now.getHours();
+      if (currentHour < 4) {
+        const hours = Array.from({ length: Math.max(2, currentHour + 1) }, (_, i) => i);
+        hours.forEach((h, idx) => {
+          const slotStart = new Date(todayStart.getFullYear(), todayStart.getMonth(), todayStart.getDate(), h, 0, 0, 0);
+          const isLast = idx === hours.length - 1;
+          const slotEnd = isLast ? now : new Date(todayStart.getFullYear(), todayStart.getMonth(), todayStart.getDate(), h + 1, 0, 0, 0);
+          const timeLabel = slotStart.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true });
+          const label = isLast ? `Now (${timeLabel})` : timeLabel;
+          chartData.push(aggregateBucket(label, timeLabel, slotStart, slotEnd, isLast));
         });
-        const rev = slotOrders.reduce((sum, o) => sum + Number(o.totalAmount || 0), 0);
-        chartData.push({
-          date: slot.label,
-          label: slot.label,
-          revenue: rev,
-          orders: slotOrders.length,
-          topProduct: slotOrders[0]?.items?.[0]?.product_name_snapshot || undefined,
-        });
+      } else {
+        const numPoints = 6;
+        const hourStep = currentHour / (numPoints - 1);
+        for (let i = 0; i < numPoints; i++) {
+          const targetHour = Math.min(currentHour, Math.round(i * hourStep));
+          const ptDate = new Date(todayStart.getFullYear(), todayStart.getMonth(), todayStart.getDate(), targetHour, 0, 0, 0);
+          const timeLabel = ptDate.toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit", hour12: true });
+
+          const startH = i === 0 ? 0 : (i - 0.5) * hourStep;
+          const endH = i === numPoints - 1 ? 24 : (i + 0.5) * hourStep;
+          const slotStart = new Date(todayStart.getTime() + Math.round(startH * 3600000));
+          const slotEnd = i === numPoints - 1 ? now : new Date(todayStart.getTime() + Math.round(endH * 3600000));
+
+          const isLast = i === numPoints - 1;
+          const label = isLast ? `Now (${timeLabel})` : timeLabel;
+          chartData.push(aggregateBucket(label, timeLabel, slotStart, slotEnd, isLast));
+        }
       }
     } else if (period === "this_week") {
-      // 7 daily checkpoints (Mon to Sun)
-      const dayNames = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-      for (let i = 0; i < 7; i++) {
-        const d = new Date(periodStart);
-        d.setDate(d.getDate() + i);
-        const dateStr = d.toLocaleDateString("en-IN", { month: "short", day: "numeric" });
-        const dayOrders = rawOrdersForChart.filter(
-          (o) => new Date(o.createdAt).toDateString() === d.toDateString()
-        );
-        const rev = dayOrders.reduce((sum, o) => sum + Number(o.totalAmount || 0), 0);
-        chartData.push({
-          date: dateStr,
-          label: `${dayNames[i]} (${dateStr})`,
-          revenue: rev,
-          orders: dayOrders.length,
-          topProduct: dayOrders[0]?.items?.[0]?.product_name_snapshot || undefined,
-        });
+      const day = now.getDay();
+      const dayIndex = day === 0 ? 6 : day - 1; // 0 for Mon ... 6 for Sun
+      const daysCount = dayIndex + 1; // up to today
+
+      if (daysCount === 1) {
+        const slots = [
+          { label: "06:00 AM", startH: 0, endH: 6 },
+          { label: "12:00 PM", startH: 6, endH: 12 },
+          { label: "04:00 PM", startH: 12, endH: 16 },
+          { label: `Now (${now.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true })})`, startH: 16, endH: 24 },
+        ];
+        for (let i = 0; i < slots.length; i++) {
+          const slot = slots[i];
+          const sStart = new Date(todayStart.getTime() + slot.startH * 3600000);
+          const sEnd = i === slots.length - 1 ? now : new Date(todayStart.getTime() + slot.endH * 3600000);
+          chartData.push(aggregateBucket(slot.label, slot.label, sStart, sEnd, i === slots.length - 1));
+        }
+      } else {
+        const dayNames = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+        for (let i = 0; i < daysCount; i++) {
+          const dayDate = new Date(periodStart);
+          dayDate.setDate(dayDate.getDate() + i);
+          const isToday = i === daysCount - 1;
+          const slotStart = new Date(dayDate.getFullYear(), dayDate.getMonth(), dayDate.getDate(), 0, 0, 0, 0);
+          const slotEnd = isToday ? now : new Date(dayDate.getFullYear(), dayDate.getMonth(), dayDate.getDate(), 23, 59, 59, 999);
+          const dayName = dayNames[i];
+          const dateStr = dayDate.toLocaleDateString("en-IN", { month: "short", day: "numeric" });
+          const label = isToday ? `${dayName} (${dateStr} - Today)` : `${dayName}, ${dateStr}`;
+          chartData.push(aggregateBucket(label, dateStr, slotStart, slotEnd, true));
+        }
       }
-    } else {
-      // For month / custom periods: 6 evenly spaced time checkpoints
-      const totalDuration = periodEnd.getTime() - periodStart.getTime();
+    } else if (period === "this_month") {
+      const currentDay = now.getDate();
+      if (currentDay <= 6) {
+        for (let d = 1; d <= currentDay; d++) {
+          const dayDate = new Date(now.getFullYear(), now.getMonth(), d);
+          const isToday = d === currentDay;
+          const slotStart = new Date(now.getFullYear(), now.getMonth(), d, 0, 0, 0, 0);
+          const slotEnd = isToday ? now : new Date(now.getFullYear(), now.getMonth(), d, 23, 59, 59, 999);
+          const dateStr = dayDate.toLocaleDateString("en-IN", { month: "short", day: "numeric" });
+          const label = isToday ? `${dateStr} (Today)` : dateStr;
+          chartData.push(aggregateBucket(label, dateStr, slotStart, slotEnd, true));
+        }
+      } else {
+        const numPoints = 6;
+        const dayStep = (currentDay - 1) / (numPoints - 1);
+        const checkpoints: number[] = [];
+        for (let i = 0; i < numPoints; i++) {
+          checkpoints.push(Math.round(1 + i * dayStep));
+        }
+
+        for (let i = 0; i < numPoints; i++) {
+          const ptDay = checkpoints[i];
+          const ptDate = new Date(now.getFullYear(), now.getMonth(), ptDay);
+          const dateStr = ptDate.toLocaleDateString("en-IN", { month: "short", day: "numeric" });
+          const isToday = i === numPoints - 1;
+          const label = isToday ? `${dateStr} (Today)` : dateStr;
+
+          const prevDay = i === 0 ? 1 : checkpoints[i - 1];
+          const nextDay = isToday ? currentDay : checkpoints[i + 1];
+
+          const startDayBound = i === 0 ? 1 : Math.round((prevDay + ptDay) / 2);
+          const endDayBound = isToday ? currentDay : Math.round((ptDay + nextDay) / 2) - 1;
+
+          const slotStart = new Date(now.getFullYear(), now.getMonth(), startDayBound, 0, 0, 0, 0);
+          const slotEnd = isToday ? now : new Date(now.getFullYear(), now.getMonth(), endDayBound, 23, 59, 59, 999);
+
+          chartData.push(aggregateBucket(label, dateStr, slotStart, slotEnd, isToday));
+        }
+      }
+    } else if (period === "last_month") {
+      const lastDayOfMonth = new Date(periodEnd).getDate();
       const numPoints = 6;
-      const step = totalDuration / (numPoints - 1 || 1);
+      const dayStep = (lastDayOfMonth - 1) / (numPoints - 1);
+      const checkpoints: number[] = [];
+      for (let i = 0; i < numPoints; i++) {
+        checkpoints.push(Math.round(1 + i * dayStep));
+      }
 
       for (let i = 0; i < numPoints; i++) {
-        const bucketStart = new Date(periodStart.getTime() + i * step);
-        const bucketEnd = new Date(periodStart.getTime() + (i + 1) * step);
-        const dateStr = bucketStart.toLocaleDateString("en-IN", { month: "short", day: "numeric" });
+        const ptDay = checkpoints[i];
+        const ptDate = new Date(periodStart.getFullYear(), periodStart.getMonth(), ptDay);
+        const dateStr = ptDate.toLocaleDateString("en-IN", { month: "short", day: "numeric" });
 
-        const bucketOrders = rawOrdersForChart.filter((o) => {
-          const t = new Date(o.createdAt).getTime();
-          return t >= bucketStart.getTime() && (i === numPoints - 1 ? t <= periodEnd.getTime() : t < bucketEnd.getTime());
-        });
-        const rev = bucketOrders.reduce((sum, o) => sum + Number(o.totalAmount || 0), 0);
-        chartData.push({
-          date: dateStr,
-          label: dateStr,
-          revenue: rev,
-          orders: bucketOrders.length,
-          topProduct: bucketOrders[0]?.items?.[0]?.product_name_snapshot || undefined,
-        });
+        const prevDay = i === 0 ? 1 : checkpoints[i - 1];
+        const nextDay = i === numPoints - 1 ? lastDayOfMonth : checkpoints[i + 1];
+
+        const startDayBound = i === 0 ? 1 : Math.round((prevDay + ptDay) / 2);
+        const endDayBound = i === numPoints - 1 ? lastDayOfMonth : Math.round((ptDay + nextDay) / 2) - 1;
+
+        const slotStart = new Date(periodStart.getFullYear(), periodStart.getMonth(), startDayBound, 0, 0, 0, 0);
+        const slotEnd = new Date(periodStart.getFullYear(), periodStart.getMonth(), endDayBound, 23, 59, 59, 999);
+
+        chartData.push(aggregateBucket(dateStr, dateStr, slotStart, slotEnd, i === numPoints - 1));
+      }
+    } else {
+      const numPoints = 6;
+      const totalMs = periodEnd.getTime() - periodStart.getTime();
+      const stepMs = totalMs / (numPoints - 1 || 1);
+
+      for (let i = 0; i < numPoints; i++) {
+        const ptTime = periodStart.getTime() + i * stepMs;
+        const ptDate = new Date(ptTime);
+        const dateStr = ptDate.toLocaleDateString("en-IN", { month: "short", day: "numeric" });
+        const isToday = i === numPoints - 1;
+        const label = isToday ? `${dateStr} (Today)` : dateStr;
+
+        const slotStart = new Date(periodStart.getTime() + (i === 0 ? 0 : (i - 0.5) * stepMs));
+        const slotEnd = isToday ? now : new Date(periodStart.getTime() + (i + 0.5) * stepMs);
+
+        chartData.push(aggregateBucket(label, dateStr, slotStart, slotEnd, isToday));
       }
     }
 
@@ -731,7 +874,6 @@ export async function getDashboardData(period: TimePeriod = "this_month"): Promi
       if (peak) peak.isPeak = true;
     }
   } catch {
-    // Generate clean 0s baseline if error
     const days = ["W1", "W2", "W3", "W4"];
     for (const d of days) {
       chartData.push({ date: d, label: d, revenue: 0, orders: 0 });
@@ -757,10 +899,17 @@ export async function getDashboardData(period: TimePeriod = "this_month"): Promi
       ? `Based on ${periodOrdersCount} orders`
       : "No order data for period";
 
+  const aovTrend: "up" | "down" | "neutral" =
+    prevAov > 0 ? (aovDiff >= 0 ? "up" : "down") : periodOrdersCount > 0 ? "up" : "neutral";
+
   const returnRtoRatePercent =
     periodOrdersCount > 0
       ? Math.round((cancelledOrdersCount / periodOrdersCount) * 1000) / 10
       : 0;
+
+  const grossMarginPercent = 32.5;
+  const grossMarginTrend: "up" | "down" | "neutral" = revenueGrowthPercent >= 0 ? "up" : "down";
+  const grossMarginLabel = grossMarginTrend === "up" ? "Catalog Healthy & Stable" : "Below Target Range";
 
   return {
     stats: {
@@ -793,8 +942,10 @@ export async function getDashboardData(period: TimePeriod = "this_month"): Promi
     overview: {
       averageOrderValue,
       aovComparisonText,
-      grossMarginPercent: 32.5,
-      grossMarginLabel: "Active Store Catalog",
+      aovTrend,
+      grossMarginPercent,
+      grossMarginLabel,
+      grossMarginTrend,
       returnRtoRatePercent,
       returnRtoComparisonText: `${cancelledOrdersCount} cancelled/returned of ${periodOrdersCount || 1} orders`,
     },

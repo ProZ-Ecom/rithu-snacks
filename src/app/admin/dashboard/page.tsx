@@ -179,10 +179,10 @@ export default function AdminDashboardPage() {
       />
 
       {/* Restock & Procurement Alerts (Low Stock Warning Cards) */}
-      <RestockAlertsSection alerts={dashboardData.restockAlerts} />
+      {/* <RestockAlertsSection alerts={dashboardData.restockAlerts} /> */}
 
       {/* Store Administration Shortcuts Toolbar */}
-      <AdminShortcutsBar />
+      {/* <AdminShortcutsBar /> */}
     </div>
   );
 }

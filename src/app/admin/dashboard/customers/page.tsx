@@ -10,6 +10,8 @@ import {
   type AdminCustomerListItemDto,
 } from "@/features/customers";
 import { DataTable } from "@/components/admin/data-table/DataTable";
+import { ExportExcelButton } from "@/components/admin/ExportExcelButton";
+import { EXPORT_PRESETS } from "@/lib/export-presets";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { AdminBreadcrumb } from "@/components/admin/AdminBreadcrumb";
 import { StatsCard } from "@/components/admin/StatsCard";
@@ -173,6 +175,7 @@ export default function AdminCustomersPage() {
                   src={item.profileImage}
                   alt={item.name}
                   fill
+                  sizes="40px"
                   className="object-cover"
                 />
               ) : (
@@ -505,6 +508,13 @@ export default function AdminCustomersPage() {
             {hasActiveFilters && (
               <ClearFiltersButton onClick={handleResetFilters} />
             )}
+
+            <ExportExcelButton
+              data={customers}
+              filename="customers"
+              sheetName="Customers"
+              columns={EXPORT_PRESETS.customers}
+            />
           </div>
         </div>
       </div>

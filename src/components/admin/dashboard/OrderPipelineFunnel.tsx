@@ -23,9 +23,9 @@ const STAGE_DOT_COLORS: Record<string, string> = {
 
 export function OrderPipelineFunnel({
   pipeline,
-  totalOrdersCount = 1942,
-  successRate = 96.8,
-  hubSla = 99.2,
+  totalOrdersCount = 0,
+  successRate = 100,
+  hubSla = 100,
 }: OrderPipelineFunnelProps) {
   const maxCount = Math.max(...pipeline.map((p) => p.count), 1);
 
@@ -51,7 +51,7 @@ export function OrderPipelineFunnel({
         <div className="mt-5 space-y-3.5">
           {pipeline.map((stage) => {
             const dotColor = STAGE_DOT_COLORS[stage.id] || "bg-stone-500";
-            const barWidth = Math.max((stage.count / maxCount) * 100, 4);
+            const barWidth = stage.count > 0 ? Math.max((stage.count / maxCount) * 100, 3) : 0;
 
             return (
               <div key={stage.id} className="group flex flex-col gap-1.5">
@@ -72,13 +72,15 @@ export function OrderPipelineFunnel({
 
                 {/* Progress bar line */}
                 <div className="h-2 w-full overflow-hidden rounded-full bg-stone-100 p-0.5">
-                  <div
-                    className={cn(
-                      "h-full rounded-full transition-all duration-500 ease-out",
-                      dotColor
-                    )}
-                    style={{ width: `${barWidth}%` }}
-                  />
+                  {stage.count > 0 && (
+                    <div
+                      className={cn(
+                        "h-full rounded-full transition-all duration-500 ease-out",
+                        dotColor
+                      )}
+                      style={{ width: `${barWidth}%` }}
+                    />
+                  )}
                 </div>
               </div>
             );

@@ -14,6 +14,9 @@ import { useBrands } from "@/features/brands/hooks";
 import { useHsnCodes } from "@/features/hsn-codes/hooks";
 import { DataTable } from "@/components/admin/data-table/DataTable";
 import { BulkActionsBar } from "@/components/admin/data-table/BulkActionsBar";
+import { ExportExcelButton } from "@/components/admin/ExportExcelButton";
+import { exportToExcel } from "@/lib/excel-export";
+import { EXPORT_PRESETS } from "@/lib/export-presets";
 import { toast } from "@/components/ui/Toast";
 import {
   AdminPageHeader,
@@ -168,6 +171,7 @@ export default function AdminProductsPage() {
                 src={imageUrl}
                 alt={row.original.name}
                 fill
+                sizes="40px"
                 className="object-cover"
               />
             ) : (
@@ -301,13 +305,22 @@ export default function AdminProductsPage() {
               {hasActiveFilters && <ClearFiltersButton onClick={handleClearFilters} />}
             </div>
 
-            <Button
-              onClick={() => setIsCreateOpen(true)}
-              className="h-11 rounded-xl bg-[var(--color-secondary-600)] px-5 text-sm font-semibold text-white hover:bg-[var(--color-secondary-700)]"
-            >
-              <Plus className="mr-2 h-4 w-4" />
-              Add Product
-            </Button>
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <ExportExcelButton
+                data={products}
+                filename="products"
+                sheetName="Products"
+                columns={EXPORT_PRESETS.products}
+              />
+
+              <Button
+                onClick={() => setIsCreateOpen(true)}
+                className="h-11 rounded-xl bg-[var(--color-secondary-600)] px-5 text-sm font-semibold text-white hover:bg-[var(--color-secondary-700)] shadow-xs"
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                Add Product
+              </Button>
+            </div>
           </div>
 
           <div className="mt-4 sm:mt-6 flex-1 min-h-0 min-w-0 flex flex-col">
@@ -318,6 +331,14 @@ export default function AdminProductsPage() {
               onClearSelection={() => {
                 setSelectedRowIds({});
                 setSelectedRows([]);
+              }}
+              onExport={() => {
+                exportToExcel({
+                  filename: "selected_products",
+                  sheetName: "Selected Products",
+                  data: selectedRows,
+                  columns: EXPORT_PRESETS.products,
+                });
               }}
               onDelete={() => setIsBulkDeleteOpen(true)}
               isDeleting={bulkDeleteMutation.isPending}

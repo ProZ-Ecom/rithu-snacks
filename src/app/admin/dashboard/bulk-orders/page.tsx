@@ -8,6 +8,8 @@ import {
   AdminBulkOrderDetailModal,
 } from "@/features/bulk-orders";
 import { DataTable } from "@/components/admin/data-table/DataTable";
+import { ExportExcelButton } from "@/components/admin/ExportExcelButton";
+import { EXPORT_PRESETS } from "@/lib/export-presets";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { StatsCard } from "@/components/admin/StatsCard";
 import { AdminTableSkeleton } from "@/components/admin/AdminTableSkeleton";
@@ -335,6 +337,13 @@ export default function AdminBulkOrdersPage() {
             {hasActiveFilters && (
               <ClearFiltersButton onClick={handleResetFilters} />
             )}
+
+            <ExportExcelButton
+              data={enquiries}
+              filename="bulk_order_enquiries"
+              sheetName="Bulk Orders"
+              columns={EXPORT_PRESETS.bulkOrders}
+            />
           </div>
         </div>
       </div>

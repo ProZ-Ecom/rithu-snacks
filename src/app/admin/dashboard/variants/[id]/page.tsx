@@ -405,6 +405,7 @@ export default function AdminVariantDetailsPage() {
                 src={variant.primaryImage}
                 alt={variant.variantName}
                 fill
+                sizes="(max-width: 640px) 80px, 96px"
                 className="object-cover"
               />
             ) : (
@@ -611,6 +612,7 @@ export default function AdminVariantDetailsPage() {
                       src={img.imageUrl}
                       alt={variant.variantName}
                       fill
+                      sizes="(max-width: 768px) 33vw, 150px"
                       className="object-cover"
                     />
                     {img.isPrimary ? (
@@ -676,6 +678,7 @@ export default function AdminVariantDetailsPage() {
                     src={variant.primaryImage}
                     alt={variant.variantName}
                     fill
+                    sizes="(max-width: 768px) 33vw, 150px"
                     className="object-cover"
                   />
                   <span className="absolute bottom-1.5 left-1.5 right-1.5 text-center bg-secondary-600 text-cream-white text-[9px] font-bold tracking-wider uppercase px-1 py-0.5 rounded-md shadow-xs">

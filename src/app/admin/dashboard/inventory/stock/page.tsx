@@ -15,6 +15,8 @@ import {
   AdminContent,
 } from "@/components/admin/AdminPageHeader";
 import { DataTable } from "@/components/admin/data-table/DataTable";
+import { ExportExcelButton } from "@/components/admin/ExportExcelButton";
+import { EXPORT_PRESETS } from "@/lib/export-presets";
 import { SearchInput } from "@/components/ui/search-input";
 import { Select } from "@/components/ui/select";
 import { toast } from "@/components/ui/Toast";
@@ -279,14 +281,23 @@ export default function InventoryStockPage() {
               className="w-full max-w-md"
             />
 
-            <Button
-              type="button"
-              onClick={() => setCreateOpen(true)}
-              className="h-11 rounded-xl bg-[var(--color-secondary-600)] px-5 text-sm font-semibold text-white hover:bg-[var(--color-secondary-700)] cursor-pointer"
-            >
-              <Plus className="mr-2 h-4 w-4" />
-              Add Inventory
-            </Button>
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <ExportExcelButton
+                data={filteredData}
+                filename="inventory_stock"
+                sheetName="Inventory Stock"
+                columns={EXPORT_PRESETS.inventoryStock}
+              />
+
+              <Button
+                type="button"
+                onClick={() => setCreateOpen(true)}
+                className="h-11 rounded-xl bg-[var(--color-secondary-600)] px-5 text-sm font-semibold text-white hover:bg-[var(--color-secondary-700)] cursor-pointer shadow-xs"
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                Add Inventory
+              </Button>
+            </div>
           </div>
 
           {/* Table Container */}

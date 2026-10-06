@@ -9,6 +9,8 @@ import { Select } from "@/components/ui/select";
 import { Switch } from "@/components/ui/Switch";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DataTable } from "@/components/admin/data-table/DataTable";
+import { ExportExcelButton } from "@/components/admin/ExportExcelButton";
+import { EXPORT_PRESETS } from "@/lib/export-presets";
 import { AdminTableSkeleton } from "@/components/admin/AdminTableSkeleton";
 import { ErrorState } from "@/components/ui/error-state";
 import {
@@ -317,10 +319,17 @@ export default function AdminFaqsPage() {
               )}
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <ExportExcelButton
+                data={faqs}
+                filename="faqs"
+                sheetName="FAQs"
+                columns={EXPORT_PRESETS.faqs}
+              />
+
               <Button
                 onClick={() => setIsCreateOpen(true)}
-                className="h-11 rounded-xl bg-[var(--color-secondary-600)] px-5 text-sm font-semibold text-white hover:bg-[var(--color-secondary-700)]"
+                className="h-11 rounded-xl bg-[var(--color-secondary-600)] px-5 text-sm font-semibold text-white hover:bg-[var(--color-secondary-700)] shadow-xs"
               >
                 <Plus className="mr-2 h-4 w-4" />
                 Add FAQ

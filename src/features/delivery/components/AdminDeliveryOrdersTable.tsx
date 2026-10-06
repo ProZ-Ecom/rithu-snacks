@@ -9,6 +9,8 @@ import {
   Package,
 } from "lucide-react";
 import { DataTable } from "@/components/admin/data-table/DataTable";
+import { ExportExcelButton } from "@/components/admin/ExportExcelButton";
+import { EXPORT_PRESETS } from "@/lib/export-presets";
 import { LoadingState } from "@/components/ui/loading-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { Button } from "@/components/ui/button";
@@ -315,16 +317,25 @@ export function AdminDeliveryOrdersTable() {
           </div>
         </div>
 
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => refetch()}
-          disabled={isFetching}
-          className="h-10 px-3 rounded-xl border-cream-border hover:bg-cream-100 cursor-pointer self-end sm:self-auto"
-        >
-          <RotateCcw className={`mr-1.5 h-3.5 w-3.5 ${isFetching ? "animate-spin" : ""}`} />
-          Refresh
-        </Button>
+        <div className="flex items-center gap-2 flex-wrap self-end sm:self-auto">
+          <ExportExcelButton
+            data={orders}
+            filename="delivery_orders"
+            sheetName="Deliveries"
+            columns={EXPORT_PRESETS.deliveryOrders}
+          />
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => refetch()}
+            disabled={isFetching}
+            className="h-10 px-3 rounded-xl border-cream-border hover:bg-cream-100 cursor-pointer"
+          >
+            <RotateCcw className={`mr-1.5 h-3.5 w-3.5 ${isFetching ? "animate-spin" : ""}`} />
+            Refresh
+          </Button>
+        </div>
       </div>
 
       {/* Data Table */}

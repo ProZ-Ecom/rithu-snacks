@@ -16,7 +16,7 @@ async function run() {
   const database = url.pathname.slice(1) || 'rithusnack_new';
 
   console.log(`Connecting to MySQL server at ${host}:${port}...`);
-  try {\n    const rootConn = await mariadb.createConnection({\n      host,\n      port,\n      user,\n      password,\n      allowPublicKeyRetrieval: true,\n      connectTimeout: 5000,\n    });\n    await rootConn.query(CREATE DATABASE IF NOT EXISTS \${database}\ CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;);\n    console.log(Database \${database}\ ready.);\n    await rootConn.end();\n  } catch (err) {\n    console.log(Note: Database already exists or root CREATE DATABASE skipped. Connecting to \${database}\...);\n  }
+  try { \n    const rootConn = await mariadb.createConnection({ \n      host, \n      port, \n      user, \n      password, \n      allowPublicKeyRetrieval: true, \n      connectTimeout: 5000, \n }); \n    await rootConn.query(CREATE DATABASE IF NOT EXISTS \${ database }\ CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;); \n    console.log(Database \${ database }\ ready.); \n    await rootConn.end(); \n } catch (err) { \n    console.log(Note: Database already exists or root CREATE DATABASE skipped.Connecting to \${ database }\...); \n }
 
   const conn = await mariadb.createConnection({
     host,
@@ -283,7 +283,7 @@ async function run() {
     }
 
     const createSql = `CREATE TABLE IF NOT EXISTS \`${t.tableName}\` (\n  ${colDefs.join(',\n  ')}\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`;
-    
+
     try {
       await conn.query(createSql);
       // Ensure any newly added columns exist in already-created tables

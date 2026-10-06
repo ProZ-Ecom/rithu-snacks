@@ -27,8 +27,10 @@ export interface DashboardStats {
 export interface OverviewMetrics {
   averageOrderValue: number;
   aovComparisonText: string;
+  aovTrend?: "up" | "down" | "neutral";
   grossMarginPercent: number;
   grossMarginLabel: string;
+  grossMarginTrend?: "up" | "down" | "neutral";
   returnRtoRatePercent: number;
   returnRtoComparisonText: string;
 }

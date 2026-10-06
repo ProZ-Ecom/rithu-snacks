@@ -222,8 +222,9 @@ export const orderService = {
 
 
     // Free delivery is judged on what the customer actually pays, after offers.
+    const isExpress = (input.deliveryMethod || "").toLowerCase() === "express";
     const payableBeforeShipping = subtotal - offerDiscount;
-    const shippingCharge = payableBeforeShipping >= 499 ? 0 : 49;
+    const shippingCharge = isExpress ? 99 : (payableBeforeShipping >= 499 ? 0 : 49);
     const totalAmount = payableBeforeShipping + shippingCharge;
 
     // 5. Execute creation transaction
@@ -628,6 +629,7 @@ export const orderService = {
     return this.createCustomerOrder(String(userId), {
       shippingAddressId: input.shippingAddressId || String(input.addressId),
       billingAddressId: input.billingAddressId,
+      deliveryMethod: input.deliveryMethod || "standard",
       notes: input.notes,
       paymentMethod: input.paymentMethod || "CARD",
       paymentDetails: input.paymentDetails,
@@ -662,13 +664,15 @@ export const orderService = {
       }));
 
     const pricing = await offerService.priceCartItems(lines);
-    const deliveryCharge = deliveryMethod === "EXPRESS" || deliveryMethod === "express" ? 100 : 0;
-    const totalAmount = pricing.total + deliveryCharge;
+    const isExpress = (deliveryMethod || "").toLowerCase() === "express";
+    const payableBeforeShipping = pricing.total;
+    const shippingCharge = isExpress ? 99 : (payableBeforeShipping >= 499 ? 0 : 49);
+    const totalAmount = payableBeforeShipping + shippingCharge;
 
     return {
       subtotal: pricing.subtotal,
-      deliveryCharge,
-      shippingCharge: deliveryCharge,
+      deliveryCharge: shippingCharge,
+      shippingCharge: shippingCharge,
       discount: pricing.totalDiscount,
       discountAmount: pricing.totalDiscount,
       totalSavings: pricing.totalSavings,
@@ -677,7 +681,7 @@ export const orderService = {
       totalAmount,
       totals: {
         subtotal: pricing.subtotal,
-        shipping: deliveryCharge,
+        shipping: shippingCharge,
         discount: pricing.totalDiscount,
         total: totalAmount,
       },

@@ -13,6 +13,7 @@ export interface SnackCardVariant {
   price: number; // Selling price e.g. 45
   comparePrice?: number | null; // Original price before discount e.g. 50
   inStock?: boolean;
+  isDefault?: boolean;
 }
 
 export interface SnackCardProps {
@@ -90,23 +91,34 @@ export function SnackCard({
         price: up.sellingPrice,
         comparePrice: up.basePrice > up.sellingPrice ? up.basePrice : null,
         inStock: !product.outOfStock,
+        isDefault: Boolean(up.isDefault),
       }));
     }
     return [];
   }, [variants, product]);
 
-  // Uncontrolled or controlled selected variant
-  const defaultVariantId = resolvedVariants[0]?.id || "";
+  // Default variant (marked as isDefault or first variant)
+  const defaultVariant = React.useMemo(() => {
+    return resolvedVariants.find((v) => v.isDefault) || resolvedVariants[0] || null;
+  }, [resolvedVariants]);
+
+  const defaultVariantId = defaultVariant?.id || "";
   const [internalSelectedId, setInternalSelectedId] = React.useState(defaultVariantId);
+
+  React.useEffect(() => {
+    if (defaultVariantId && !internalSelectedId) {
+      setInternalSelectedId(defaultVariantId);
+    }
+  }, [defaultVariantId, internalSelectedId]);
 
   const activeVariantId =
     controlledSelectedVariantId !== undefined
       ? controlledSelectedVariantId
-      : internalSelectedId;
+      : internalSelectedId || defaultVariantId;
 
-  // Selected variant details
+  // Selected variant details (defaults to default variant)
   const activeVariant =
-    resolvedVariants.find((v) => v.id === activeVariantId) || resolvedVariants[0] || null;
+    resolvedVariants.find((v) => v.id === activeVariantId) || defaultVariant;
 
   const currentPrice = activeVariant ? activeVariant.price : (fallbackPrice ?? 0);
   const originalPrice = activeVariant?.comparePrice ?? null;
@@ -119,16 +131,9 @@ export function SnackCard({
         ? Math.round(((originalPrice - currentPrice) / originalPrice) * 100)
         : 0;
 
-  const handleSelectVariant = (variantId: string) => {
-    if (controlledSelectedVariantId === undefined) {
-      setInternalSelectedId(variantId);
-    }
-    onVariantChange?.(variantId);
-  };
-
   return (
     <div
-      className={`group bg-[var(--theme-surface)]  pb-3 flex flex-col justify-between w-full max-w-sm transition-all duration-300 hover:shadow-md hover:border-[var(--brown-700)]/40 ${className}`}
+      className={`group bg-[var(--theme-surface)] pb-3 flex flex-col justify-between w-full max-w-sm transition-all duration-300 hover:shadow-md hover:border-[var(--brown-700)]/40 ${className}`}
     >
       {/* 1. Square Product Image Container */}
       <div className="relative aspect-square w-full overflow-hidden bg-[var(--cream-100)]">
@@ -170,7 +175,7 @@ export function SnackCard({
         </button>
       </div>
 
-      {/* 2. Middle Info Row: Title on Left, Variants + Price on Right */}
+      {/* 2. Middle Info Row: Title on Left, Default Size + Price on Right */}
       <div className="mt-3.5 sm:mt-4 flex items-start justify-between gap-3 px-0.5">
         {/* Left Column: Product/Variant Title using global brown typography */}
         <div className="flex-1 pr-1 min-w-0">
@@ -186,32 +191,18 @@ export function SnackCard({
           </Link>
         </div>
 
-        {/* Right Column: Variant Selector & Prices */}
+        {/* Right Column: Default Size Badge & Price */}
         <div className="flex flex-col items-end shrink-0">
-          {/* Variant Selector Pills using global brown colors */}
-          {resolvedVariants.length > 0 && (
-            <div className="flex items-center gap-1.5 flex-wrap justify-end">
-              {resolvedVariants.map((v) => {
-                const isSelected = v.id === activeVariant?.id;
-                return (
-                  <button
-                    key={v.id}
-                    type="button"
-                    onClick={() => handleSelectVariant(v.id)}
-                    className={`px-2 sm:px-2.5 py-0.5 text-xs font-bold rounded-[2px] transition-all cursor-pointer select-none ${
-                      isSelected
-                        ? "bg-[var(--brown-700)] text-white border border-[var(--brown-700)]"
-                        : "bg-white text-[var(--brown-700)] border border-[var(--brown-700)] hover:bg-[var(--cream-50)]"
-                    }`}
-                  >
-                    {typeof v.label === "string"
-                      ? v.label
-                      : typeof v.label === "object" && v.label !== null
-                      ? `${(v.label as any).value ?? ""} ${(v.label as any).unit ?? ""}`.trim() || "Standard"
-                      : String(v.label || "")}
-                  </button>
-                );
-              })}
+          {/* Default Pack Size Label / Badge */}
+          {activeVariant && (
+            <div className="flex items-center justify-end">
+              <span className="px-2 sm:px-2.5 py-0.5 text-xs font-bold rounded-[2px] bg-[var(--brown-700)] text-white border border-[var(--brown-700)] select-none">
+                {typeof activeVariant.label === "string"
+                  ? activeVariant.label
+                  : typeof activeVariant.label === "object" && activeVariant.label !== null
+                  ? `${(activeVariant.label as any).value ?? ""} ${(activeVariant.label as any).unit ?? ""}`.trim() || "Standard"
+                  : String(activeVariant.label || "")}
+              </span>
             </div>
           )}
 

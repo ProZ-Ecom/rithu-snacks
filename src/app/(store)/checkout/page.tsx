@@ -43,6 +43,7 @@ import { customerPaymentApi } from "@/features/customers/api/customer-payment.ap
 import { useCheckout } from "@/features/checkout/checkout-context";
 import type { CustomerAddressResponse } from "@/features/customers/types/customer-address.types";
 import { usePincodeLookup } from "@/lib/pincode";
+import { loadRazorpayScript } from "@/features/customers/utils/razorpay-loader";
 
 
 function CheckoutSkeleton() {
@@ -110,10 +111,9 @@ export default function CheckoutPage() {
   const [orderNotes, setOrderNotes] = useState<string>("");
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
 
-  // Redirect payment in-flight guard
+  // Payment in-flight guards
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
-  const [isVerifyingPayment] = useState(false); // kept for UI compat
-  const [pendingOrder] = useState<null>(null); // no longer used (redirect flow)
+  const [isVerifyingPayment, setIsVerifyingPayment] = useState(false);
 
 
   // Add Address Modal state
@@ -332,12 +332,8 @@ export default function CheckoutPage() {
     );
   }
 
-  // With redirect flow, pendingOrder is always null — this guard is kept for safety.
-  if (pendingOrder && !isOrderPlaced) {
-    return null;
-  }
-
   // Empty cart guard
+
   if (items.length === 0) {
     return (
       <div className="container mx-auto px-4 py-12 max-w-4xl text-center">
@@ -421,8 +417,8 @@ export default function CheckoutPage() {
     }
   };
 
-  // Launch redirect-based Razorpay payment
-  const launchRedirectPayment = async (targetAddressId?: string) => {
+  // In-built Razorpay payment flow via embedded modal
+  const launchInbuiltRazorpayPayment = async (targetAddressId?: string) => {
     setIsProcessingPayment(true);
     setCheckoutError(null);
 
@@ -434,19 +430,119 @@ export default function CheckoutPage() {
     }
 
     try {
-      // Call backend to create Razorpay order + one-time token
-      const result = await customerPaymentApi.initiateRedirectPayment({
+      // 1. Asynchronously load Razorpay Checkout SDK
+      const isLoaded = await loadRazorpayScript();
+      if (!isLoaded) {
+        setIsProcessingPayment(false);
+        setCheckoutError(
+          "Could not load Razorpay SDK. Please check your internet connection and try again."
+        );
+        return;
+      }
+
+      // 2. Create Razorpay Order from active cart
+      const razorpayOrder = await customerPaymentApi.createRazorpayOrder({
+        orderId: "cart",
         shippingAddressId: shippingId,
-        billingAddressId: shippingId,
-        notes: orderNotes.trim() || undefined,
+        deliveryMethod: deliveryMethod,
       });
 
-      // Redirect browser to payment app
-      window.location.href = result.paymentUrl;
+      // 3. Find address details for prefill
+      const chosenAddress = addresses.find((a) => a.id === shippingId);
+      const user = session?.user;
+
+      // 4. Configure Razorpay In-built Modal Options
+      const options = {
+        key: razorpayOrder.keyId,
+        amount: razorpayOrder.amount,
+        currency: razorpayOrder.currency || "INR",
+        name: "Rithu's Snacks",
+        description: `Order Checkout - ₹${(razorpayOrder.amount / 100).toFixed(2)}`,
+        order_id: razorpayOrder.razorpayOrderId,
+        prefill: {
+          name: chosenAddress ? chosenAddress.fullName : user?.name || "",
+          email: user?.email || "",
+          contact: chosenAddress?.phone || (user as any)?.phone || "",
+        },
+
+        theme: {
+          color: "#7D1D20", // Rithu Snacks warm brand maroon
+        },
+        modal: {
+          ondismiss: () => {
+            setIsProcessingPayment(false);
+            setIsVerifyingPayment(false);
+            setCheckoutError(
+              "Payment window was closed. You can retry whenever you are ready."
+            );
+          },
+        },
+        handler: async (response: {
+          razorpay_order_id: string;
+          razorpay_payment_id: string;
+          razorpay_signature: string;
+        }) => {
+          setIsVerifyingPayment(true);
+          try {
+            // 5. Verify Cryptographic Payment Signature & Confirm Order
+            const verifyResult = await customerPaymentApi.verifyPayment({
+              orderId: "cart",
+              shippingAddressId: shippingId,
+              billingAddressId: shippingId,
+              deliveryMethod: deliveryMethod,
+              notes: orderNotes.trim() || undefined,
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_signature: response.razorpay_signature,
+            });
+
+            setIsOrderPlaced(true);
+            queryClient.invalidateQueries({
+              queryKey: CUSTOMER_ORDERS_QUERY_KEY,
+              refetchType: "all",
+            });
+            queryClient.invalidateQueries({
+              queryKey: ["customer", "cart"],
+              refetchType: "all",
+            });
+            queryClient.invalidateQueries({
+              queryKey: ["cart"],
+              refetchType: "all",
+            });
+
+            router.push(
+              `/checkout/success?orderNumber=${encodeURIComponent(
+                verifyResult.orderNumber
+              )}&orderId=${encodeURIComponent(verifyResult.orderId)}`
+            );
+          } catch (err: any) {
+            setCheckoutError(
+              err.message ||
+                "Payment verification failed. Please contact customer support."
+            );
+          } finally {
+            setIsProcessingPayment(false);
+            setIsVerifyingPayment(false);
+          }
+        },
+      };
+
+      const razorpayInstance = new (window as any).Razorpay(options);
+      razorpayInstance.on("payment.failed", function (response: any) {
+        setIsProcessingPayment(false);
+        setIsVerifyingPayment(false);
+        setCheckoutError(
+          response?.error?.description ||
+            "Transaction was declined or failed. Please try again."
+        );
+      });
+      razorpayInstance.open();
     } catch (err: any) {
       setIsProcessingPayment(false);
+      setIsVerifyingPayment(false);
       setCheckoutError(
-        err.message || "Failed to initiate payment. Please check your details and try again."
+        err.message ||
+          "Failed to initialize payment gateway. Please check item stock and retry."
       );
     }
   };
@@ -469,6 +565,7 @@ export default function CheckoutPage() {
       try {
         const orderRes = await createOrderMutation.mutateAsync({
           shippingAddressId: effectiveAddressId,
+          deliveryMethod: deliveryMethod,
           paymentMethod: "COD",
           notes: orderNotes.trim() || undefined,
           paymentDetails: {
@@ -506,11 +603,10 @@ export default function CheckoutPage() {
       return;
     }
 
-    // 2. Online Payment (Razorpay) — Redirect to payment app
-    // No popup. Browser navigates to the payment domain.
-    // Order is only created after payment verification on the backend.
-    await launchRedirectPayment(effectiveAddressId);
+    // 2. Online Payment (In-built Razorpay standard modal)
+    await launchInbuiltRazorpayPayment(effectiveAddressId);
   };
+
 
 
   return (
@@ -1192,7 +1288,7 @@ export default function CheckoutPage() {
                 ) : isProcessingPayment ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Redirecting to Payment...
+                    Opening Razorpay Gateway...
                   </>
                 ) : createOrderMutation.isPending ? (
                   <>

@@ -224,6 +224,7 @@ function FormImageUpload({
                 src={imageUrl}
                 alt="Preview"
                 fill
+                sizes="(max-width: 640px) 100vw, 300px"
                 className="rounded-xl object-contain p-2"
               />
             </div>

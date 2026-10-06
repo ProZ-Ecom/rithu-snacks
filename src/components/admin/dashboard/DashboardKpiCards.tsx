@@ -13,9 +13,11 @@ import {
   TrendingUp,
   CheckCircle2,
   AlertCircle,
+  Landmark,
 } from "lucide-react";
 import { formatPrice } from "@/lib/utils";
 import type { DashboardStats } from "@/features/dashboard/types";
+import { useRazorpaySettlements } from "@/features/payment/hooks/use-razorpay-settlements";
 import { cn } from "@/lib/utils";
 
 interface DashboardKpiCardsProps {
@@ -23,6 +25,13 @@ interface DashboardKpiCardsProps {
 }
 
 export function DashboardKpiCards({ stats }: DashboardKpiCardsProps) {
+  const { data: settlementData, isLoading: isSettlementsLoading } = useRazorpaySettlements(90);
+
+  const settlementSummary = settlementData?.settlementSummary;
+  const totalSettled = settlementSummary?.totalSettled ?? 0;
+  const netReceived = settlementSummary?.netReceived ?? 0;
+  const settlementCount = settlementSummary?.settlementCount ?? 0;
+  const pendingSettlement = settlementData?.paymentSummary?.pendingSettlement ?? 0;
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
       {/* 1. TOTAL PRODUCTS */}
@@ -68,7 +77,7 @@ export function DashboardKpiCards({ stats }: DashboardKpiCardsProps) {
           </div>
           <div className="mt-2.5 flex items-center gap-1.5 text-xs text-stone-500">
             <span className="inline-block h-1.5 w-1.5 rounded-full bg-indigo-500"></span>
-            <span className="truncate">Sweets, Savouries & Millets</span>
+            <span className="truncate">{stats.categoriesBadgeText || "Store categories active"}</span>
           </div>
         </div>
       </div>
@@ -91,7 +100,11 @@ export function DashboardKpiCards({ stats }: DashboardKpiCardsProps) {
           </div>
           <div className="mt-2.5 flex items-center gap-1.5 text-xs font-semibold text-emerald-600">
             <TrendingUp className="h-3.5 w-3.5 shrink-0" />
-            <span>+{stats.customerGrowthPercent ?? 14.2}% from last month</span>
+            <span>
+              {stats.customerGrowthPercent !== undefined
+                ? `${stats.customerGrowthPercent >= 0 ? "+" : ""}${stats.customerGrowthPercent}% vs prev period`
+                : "Active customer base"}
+            </span>
           </div>
         </div>
       </div>
@@ -113,33 +126,57 @@ export function DashboardKpiCards({ stats }: DashboardKpiCardsProps) {
             </span>
           </div>
           <div className="mt-2.5 flex items-center gap-1.5 text-xs font-medium text-stone-600">
-            <span className="font-bold text-emerald-600">{stats.fulfillmentRatePercent ?? 98.4}%</span>
-            <span>fulfillment success rate</span>
+            <span className="font-bold text-emerald-600">{stats.fulfillmentRatePercent ?? 100}%</span>
+            <span>fulfillment rate</span>
           </div>
         </div>
       </div>
 
-      {/* 5. GROSS REVENUE */}
+      {/* 5. PAYMENT SETTLEMENTS (Replaces Gross Revenue) */}
       <div className="relative overflow-hidden rounded-2xl border border-stone-200/90 bg-white p-4.5 shadow-2xs hover:shadow-xs transition-shadow">
         <div className="flex items-start justify-between">
-          <span className="text-[11px] font-bold uppercase tracking-wider text-stone-500">
-            Gross Revenue
-          </span>
+          <div className="flex items-center gap-1.5">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-stone-500">
+              Payment Settlements
+            </span>
+            <span className="rounded-md bg-emerald-50 px-1.5 py-0.2 text-[9px] font-bold text-emerald-700 ring-1 ring-emerald-600/20">
+              Live API
+            </span>
+          </div>
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 ring-1 ring-emerald-500/15">
-            <IndianRupee className="h-4.5 w-4.5" />
+            <Landmark className="h-4.5 w-4.5" />
           </div>
         </div>
         <div className="mt-1">
           <div className="flex items-baseline gap-1.5">
             <span className="text-2xl sm:text-3xl font-extrabold tracking-tight text-stone-900">
-              {formatPrice(stats.grossRevenue)}
+              {isSettlementsLoading && !settlementData ? (
+                <span className="inline-block h-8 w-28 animate-pulse rounded bg-stone-100" />
+              ) : (
+                formatPrice(totalSettled)
+              )}
             </span>
           </div>
           <div className="mt-2.5 flex items-center gap-1.5 text-xs font-semibold text-emerald-600">
-            <span className="rounded-md bg-emerald-50 px-1.5 py-0.5 ring-1 ring-emerald-600/20">
-              +{stats.revenueGrowthPercent ?? 18.6}%
-            </span>
-            <span className="text-stone-500 font-medium">vs previous month</span>
+            {isSettlementsLoading && !settlementData ? (
+              <span className="text-stone-400 font-normal">Fetching settlement data...</span>
+            ) : settlementCount > 0 ? (
+              <>
+                <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
+                <span className="truncate text-stone-600 font-medium">
+                  Net: <span className="font-bold text-emerald-700">{formatPrice(netReceived)}</span> ({settlementCount} batch{settlementCount === 1 ? "" : "es"})
+                </span>
+              </>
+            ) : (
+              <>
+                <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
+                <span className="truncate text-stone-500 font-medium">
+                  {pendingSettlement > 0
+                    ? `Pending: ${formatPrice(pendingSettlement)}`
+                    : "No settlements pending"}
+                </span>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -163,7 +200,7 @@ export function DashboardKpiCards({ stats }: DashboardKpiCardsProps) {
           </div>
           <div className="mt-2.5 flex items-center gap-1.5 text-xs font-semibold text-amber-700">
             <AlertCircle className="h-3.5 w-3.5 shrink-0 text-amber-600" />
-            <span className="truncate">{stats.pendingOrdersNotice || "Requires packing & depot scan"}</span>
+            <span className="truncate">{stats.pendingOrdersNotice || "All orders processed"}</span>
           </div>
         </div>
       </div>
@@ -187,7 +224,7 @@ export function DashboardKpiCards({ stats }: DashboardKpiCardsProps) {
           </div>
           <div className="mt-2.5 flex items-center gap-1.5 text-xs font-semibold text-rose-700">
             <span className="h-2 w-2 shrink-0 rounded-full bg-rose-500 animate-pulse"></span>
-            <span className="truncate">{stats.stockWarningsNotice || "3 critical re-orders needed"}</span>
+            <span className="truncate">{stats.stockWarningsNotice || "Inventory levels optimal"}</span>
           </div>
         </div>
       </div>
@@ -211,7 +248,11 @@ export function DashboardKpiCards({ stats }: DashboardKpiCardsProps) {
           </div>
           <div className="mt-2.5 flex items-center gap-1.5 text-xs font-semibold text-stone-700">
             <span className="text-emerald-700 font-bold">{formatPrice(stats.todayRevenue)}</span>
-            <span className="text-stone-500 font-normal">collected (+{stats.todayAvgComparison ?? 8}% vs avg)</span>
+            <span className="text-stone-500 font-normal">
+              {stats.todayAvgComparison !== undefined
+                ? `(${stats.todayAvgComparison >= 0 ? "+" : ""}${stats.todayAvgComparison}% vs daily avg)`
+                : ""}
+            </span>
           </div>
         </div>
       </div>

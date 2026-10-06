@@ -227,6 +227,7 @@ export function VariantCustomerPreviewModal({
                     src={currentImage}
                     alt={variant.productName || variant.variantName}
                     fill
+                    sizes="(max-width: 640px) 100vw, 400px"
                     className="object-cover transition-transform duration-300 group-hover:scale-105"
                   />
 
@@ -313,6 +314,7 @@ export function VariantCustomerPreviewModal({
                           src={thumbUrl}
                           alt="Thumbnail"
                           fill
+                          sizes="40px"
                           className="object-cover"
                         />
                       </button>
@@ -375,6 +377,7 @@ export function VariantCustomerPreviewModal({
                     src={currentImage}
                     alt={variant.variantName}
                     fill
+                    sizes="80px"
                     className="object-cover"
                   />
 

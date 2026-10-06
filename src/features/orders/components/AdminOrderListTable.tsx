@@ -18,6 +18,8 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { DataTable } from "@/components/admin/data-table/DataTable";
+import { ExportExcelButton } from "@/components/admin/ExportExcelButton";
+import { EXPORT_PRESETS } from "@/lib/export-presets";
 import { LoadingState } from "@/components/ui/loading-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { Button } from "@/components/ui/button";
@@ -486,7 +488,7 @@ export function AdminOrderListTable({
           />
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <div className="w-40">
             <Select
               value={paymentFilter}
@@ -505,6 +507,13 @@ export function AdminOrderListTable({
               className="h-10 rounded-xl font-semibold"
             />
           </div>
+
+          <ExportExcelButton
+            data={orders}
+            filename={`orders${status ? `_${status.toLowerCase()}` : ""}`}
+            sheetName="Orders"
+            columns={EXPORT_PRESETS.orders}
+          />
 
           {hasActiveFilters && <ClearFiltersButton onClick={handleClearFilters} />}
         </div>

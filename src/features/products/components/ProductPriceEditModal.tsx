@@ -305,6 +305,7 @@ export function ProductPriceEditModal({
                                 src={r.primaryImage}
                                 alt={r.variantName}
                                 fill
+                                sizes="36px"
                                 className="object-cover"
                               />
                             ) : (

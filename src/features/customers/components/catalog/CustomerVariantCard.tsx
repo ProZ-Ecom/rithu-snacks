@@ -41,20 +41,23 @@ export function CustomerVariantCard({ variant }: CustomerVariantCardProps) {
         price: up.sellingPrice,
         comparePrice: up.basePrice > up.sellingPrice ? up.basePrice : null,
         inStock: !variant.outOfStock,
+        isDefault: Boolean(up.isDefault),
       };
     });
   }, [variant.unitPrices, variant.outOfStock]);
 
-  const defaultUnit = variant.unitPrices?.find((u) => u.isDefault);
+  const defaultUnit = variant.unitPrices?.find((u) => u.isDefault) || variant.unitPrices?.[0];
   const [selectedUnitPriceId, setSelectedUnitPriceId] = React.useState(
     defaultUnit?.id || packVariants[0]?.id || ""
   );
 
   React.useEffect(() => {
-    if (packVariants.length > 0 && !packVariants.some((v) => v.id === selectedUnitPriceId)) {
-      setSelectedUnitPriceId(packVariants[0].id);
+    const defaultId = variant.unitPrices?.find((u) => u.isDefault)?.id || variant.unitPrices?.[0]?.id;
+    if (defaultId) {
+      setSelectedUnitPriceId(defaultId);
     }
-  }, [packVariants, selectedUnitPriceId]);
+  }, [variant.unitPrices]);
+
 
   const activeUnitPriceId = selectedUnitPriceId || packVariants[0]?.id;
   const isWishlisted = Boolean(activeUnitPriceId && wishlistedIds.has(activeUnitPriceId));

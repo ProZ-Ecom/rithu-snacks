@@ -10,6 +10,8 @@ import {
   useDeleteCoupon,
 } from "@/features/coupons/hooks";
 import { DataTable } from "@/components/admin/data-table/DataTable";
+import { ExportExcelButton } from "@/components/admin/ExportExcelButton";
+import { EXPORT_PRESETS } from "@/lib/export-presets";
 import {
   AdminPageHeader,
   AdminContent,
@@ -285,14 +287,23 @@ export default function AdminCouponsPage() {
               className="w-full max-w-md"
             />
 
-            <Button
-              type="button"
-              onClick={() => handleOpenModal()}
-              className="h-11 rounded-xl bg-[var(--color-secondary-600)] px-5 text-sm font-semibold text-white hover:bg-[var(--color-secondary-700)] cursor-pointer"
-            >
-              <Plus className="mr-2 h-4 w-4" />
-              Add Coupon
-            </Button>
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <ExportExcelButton
+                data={coupons}
+                filename="coupons"
+                sheetName="Coupons"
+                columns={EXPORT_PRESETS.coupons}
+              />
+
+              <Button
+                type="button"
+                onClick={() => handleOpenModal()}
+                className="h-11 rounded-xl bg-[var(--color-secondary-600)] px-5 text-sm font-semibold text-white hover:bg-[var(--color-secondary-700)] cursor-pointer shadow-xs"
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                Add Coupon
+              </Button>
+            </div>
           </div>
 
           {/* Table Container */}

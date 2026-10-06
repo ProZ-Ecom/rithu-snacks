@@ -10,6 +10,8 @@ import {
   AdminContactReplyModal,
 } from "@/features/contact";
 import { DataTable } from "@/components/admin/data-table/DataTable";
+import { ExportExcelButton } from "@/components/admin/ExportExcelButton";
+import { EXPORT_PRESETS } from "@/lib/export-presets";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { AdminBreadcrumb } from "@/components/admin/AdminBreadcrumb";
 import { StatsCard } from "@/components/admin/StatsCard";
@@ -331,6 +333,13 @@ export default function AdminContactsPage() {
             {hasActiveFilters && (
               <ClearFiltersButton onClick={handleResetFilters} />
             )}
+
+            <ExportExcelButton
+              data={contacts}
+              filename="contact_messages"
+              sheetName="Contacts"
+              columns={EXPORT_PRESETS.contacts}
+            />
           </div>
         </div>
 
