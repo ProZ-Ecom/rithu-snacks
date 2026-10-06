@@ -551,8 +551,8 @@ export default function AdminVariantsPage() {
 
               <ExportExcelButton
                 data={variants}
-                filename="variants"
-                sheetName="Variants"
+                filename="items"
+                sheetName="Items"
                 columns={EXPORT_PRESETS.variants}
               />
 
@@ -582,8 +582,8 @@ export default function AdminVariantsPage() {
               }}
               onExport={() => {
                 exportToExcel({
-                  filename: "selected_variants",
-                  sheetName: "Selected Variants",
+                  filename: "selected_items",
+                  sheetName: "Selected Items",
                   data: selectedRows,
                   columns: EXPORT_PRESETS.variants,
                 });
