@@ -8,24 +8,39 @@ import { ExportColumn } from "./excel-export";
  */
 
 export const EXPORT_PRESETS = {
-  // 1. Products Table: [Image], Product Name (& slug), Category, HSN Code
+  // 1. Products: Product Name, Category, Product Code, HSN Code, Product Image
   products: [
     { header: "Product Name", key: "name", format: "text" },
-    { header: "Product Code / Slug", key: "slug", format: "text" },
     {
       header: "Category",
       accessor: (row: any) => row.categoryName || row.category?.name || "—",
       format: "text",
     },
+    { header: "Product Code", key: "slug", format: "text" },
     {
       header: "HSN Code",
-      accessor: (row: any) => row.hsnCodeName || row.hsnCode?.code || "—",
+      accessor: (row: any) =>
+        row.hsnCodeName ||
+        row.hsnCode?.code ||
+        row.product_hsn_codes?.code ||
+        "—",
+      format: "text",
+    },
+    {
+      header: "Product Image",
+      accessor: (row: any) =>
+        row.imageUrl ||
+        (Array.isArray(row.images) && row.images.length > 0
+          ? row.images[0].image_url || row.images[0].url || ""
+          : "") ||
+        row.image ||
+        "—",
       format: "text",
     },
   ] as ExportColumn[],
 
-  // 2. Variants Table: [Image], Product, Item & SKU, Pack Sizes, Price, Stock, Status
-  variants: [
+  // 2. Items: Product, Item Name, Item Code, Dietary Type, Best Before, Featured Item, Ready to Mix, Cooking Recipe, Short Description, Description, Ingredients, Item Image, SKU, Pack Sizes, Price, Stock, Status
+  items: [
     {
       header: "Product",
       accessor: (row: any) => row.productName || row.product?.name || "—",
@@ -36,23 +51,105 @@ export const EXPORT_PRESETS = {
       accessor: (row: any) => row.variantName || row.name || "—",
       format: "text",
     },
-    { header: "SKU", key: "sku", format: "text" },
+    {
+      header: "Item Code",
+      accessor: (row: any) => row.slug || "—",
+      format: "text",
+    },
+    {
+      header: "Dietary Type",
+      accessor: (row: any) => {
+        const vt = (row.vegType || "").toLowerCase();
+        if (vt === "veg") return "Vegetarian (Veg)";
+        if (vt === "nonveg" || vt === "non-veg") return "Non-Vegetarian (Non-Veg)";
+        if (vt === "vegan") return "Vegan";
+        if (vt === "na" || vt === "n/a") return "Not Applicable (N/A)";
+        return row.vegType ? String(row.vegType).toUpperCase() : "Not Applicable (N/A)";
+      },
+      format: "text",
+    },
+    {
+      header: "Best Before",
+      accessor: (row: any) => row.shelfLife || "—",
+      format: "text",
+    },
+    {
+      header: "Featured Item",
+      accessor: (row: any) => (row.isFeatured ? "Yes" : "No"),
+      format: "text",
+    },
+    {
+      header: "Ready to Mix",
+      accessor: (row: any) => (row.isReadyToMix ? "Yes" : "No"),
+      format: "text",
+    },
+    {
+      header: "Cooking Recipe",
+      accessor: (row: any) => row.cookingRecipe || "—",
+      format: "text",
+    },
+    {
+      header: "Short Description",
+      accessor: (row: any) => row.shortDescription || "—",
+      format: "text",
+    },
+    {
+      header: "Description",
+      accessor: (row: any) => {
+        if (!row.description) return "—";
+        return String(row.description).replace(/<[^>]*>?/gm, "").trim() || "—";
+      },
+      format: "text",
+    },
+    {
+      header: "Ingredients",
+      accessor: (row: any) => row.ingredients || "—",
+      format: "text",
+    },
+    {
+      header: "Item Image",
+      accessor: (row: any) =>
+        row.primaryImage ||
+        row.imageUrl ||
+        (Array.isArray(row.images) && row.images.length > 0
+          ? row.images[0].imageUrl || row.images[0].image_url || row.images[0].url || ""
+          : "") ||
+        row.image ||
+        "—",
+      format: "text",
+    },
+    {
+      header: "SKU",
+      accessor: (row: any) => {
+        const prices = row.unitPrices ?? [];
+        if (prices.length > 0) {
+          const skus = prices.map((p: any) => p.sku).filter(Boolean);
+          if (skus.length > 0) return skus.join(", ");
+        }
+        return row.sku || "—";
+      },
+      format: "text",
+    },
     {
       header: "Pack Sizes",
       accessor: (row: any) => {
         const prices = row.unitPrices ?? [];
         if (prices.length > 0) {
           return prices
-            .map((p: any) =>
-              p.measurement
-                ? `${p.measurement.value} ${p.measurement.unit}`
-                : ""
-            )
+            .map((p: any) => {
+              if (p.measurement && p.measurement.value && p.measurement.unit) {
+                return `${p.measurement.value} ${p.measurement.unit}`.trim();
+              }
+              if (p.unitValue && (p.unitCode || p.unitName)) {
+                return `${p.unitValue} ${p.unitCode || p.unitName}`.trim();
+              }
+              return "";
+            })
             .filter(Boolean)
             .join(", ");
         }
         const m = row.measurement;
-        return m ? `${m.value} ${m.unit}` : "—";
+        return m && m.value && m.unit ? `${m.value} ${m.unit}` : "—";
       },
       format: "text",
     },
@@ -106,10 +203,20 @@ export const EXPORT_PRESETS = {
     },
   ] as ExportColumn[],
 
-  // 3. Categories Table: [Image], Category Name, Category Code, Sort Order
+  // Alias for backward compatibility
+  get variants() {
+    return this.items;
+  },
+
+  // 3. Categories: Category Name, Category Code, Description, Sort Order
   categories: [
     { header: "Category Name", key: "name", format: "text" },
     { header: "Category Code", key: "slug", format: "text" },
+    {
+      header: "Description",
+      accessor: (row: any) => row.description || "—",
+      format: "text",
+    },
     { header: "Sort Order", key: "sortOrder", format: "number" },
   ] as ExportColumn[],
 
@@ -260,7 +367,7 @@ export const EXPORT_PRESETS = {
     },
   ] as ExportColumn[],
 
-  // 10. Inventory Stock Table: Product Name, Variant, Quantity, Reserved, Available, Reorder Level, Status
+  // 10. Inventory Stock Table: Product Name, Item Name, Quantity, Reserved, Available, Reorder Level, Status
   inventoryStock: [
     {
       header: "Product Name",
@@ -268,8 +375,8 @@ export const EXPORT_PRESETS = {
       format: "text",
     },
     {
-      header: "Variant",
-      accessor: (row: any) => row.variantName || row.variant?.sku || "—",
+      header: "Item Name",
+      accessor: (row: any) => row.variantName || row.name || row.variant?.sku || "—",
       format: "text",
     },
     { header: "Quantity", key: "quantity", format: "number" },
@@ -418,7 +525,7 @@ export const EXPORT_PRESETS = {
     },
   ] as ExportColumn[],
 
-  // 14. Reviews Table: Customer, Date, Product / Variant, Rating, Review Title, Review Comment, Status
+  // 14. Reviews Table: Customer, Date, Product / Item, Rating, Review Title, Review Comment, Status
   reviews: [
     {
       header: "Customer",
@@ -433,8 +540,8 @@ export const EXPORT_PRESETS = {
       format: "text",
     },
     {
-      header: "Variant",
-      accessor: (row: any) => row.variant?.name || row.variant?.sku || "—",
+      header: "Item Name",
+      accessor: (row: any) => row.variant?.name || row.variant?.variantName || row.variant?.sku || "—",
       format: "text",
     },
     { header: "Rating (Stars)", key: "rating", format: "number" },
@@ -730,3 +837,6 @@ export const EXPORT_PRESETS = {
     },
   ] as ExportColumn[],
 };
+
+export { exportProductsMatrixToExcel, exportVariantsMatrixToExcel } from "./excel-export";
+

@@ -63,6 +63,34 @@ async function formatAdminProductResponse(
     product.images?.[0]?.image_url ??
     null;
 
+  const rawVariants = (product as any).variants || [];
+  const items = rawVariants.map((v: any) => ({
+    id: v.uuid || String(v.id),
+    name: v.variant_name || "Standard",
+    slug: v.slug || "",
+    vegType: v.veg_type,
+    shelfLife: v.shelf_life ?? null,
+    isActive: Boolean(v.isActive),
+    outOfStock: Boolean(v.out_of_stock),
+    unitPrices: (v.variant_unit_prices || []).map((up: any) => {
+      const uVal = Number(up.unit_value ?? up.unitValue ?? 0);
+      const uCode = up.product_units?.code || up.unitCode || "";
+      const uName = up.product_units?.name || up.unitName || "";
+      const displayUnit = uCode || uName;
+      return {
+        id: up.uuid || String(up.id),
+        sku: up.sku || "",
+        basePrice: Number(up.base_price ?? up.basePrice ?? 0),
+        unitValue: uVal,
+        unitCode: uCode,
+        unitName: uName,
+        packSize: displayUnit ? `${uVal} ${displayUnit}` : `${uVal}`,
+        stock: up.inventories?.quantity_available ?? up.stock ?? 0,
+        isDefault: Boolean(up.is_default ?? up.isDefault),
+      };
+    }),
+  }));
+
   return {
     id: productUuid,
     categoryId: categoryUuid,
@@ -78,6 +106,8 @@ async function formatAdminProductResponse(
     isActive: Boolean(product.isActive),
     createdAt: product.createdAt,
     updatedAt: product.updatedAt,
+    variants: items,
+    items: items,
   };
 }
 

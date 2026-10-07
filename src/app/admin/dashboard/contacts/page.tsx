@@ -1,15 +1,18 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   useAdminContactMessages,
   useUpdateContactMessageStatus,
+  getAdminContactMessages,
   type AdminContactMessageListItem,
   type ContactMessageStatus,
   AdminContactDetailModal,
   AdminContactReplyModal,
 } from "@/features/contact";
 import { DataTable } from "@/components/admin/data-table/DataTable";
+import { BulkActionsBar } from "@/components/admin/data-table/BulkActionsBar";
+import { exportToExcel } from "@/lib/excel-export";
 import { ExportExcelButton } from "@/components/admin/ExportExcelButton";
 import { EXPORT_PRESETS } from "@/lib/export-presets";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
@@ -41,13 +44,20 @@ export default function AdminContactsPage() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
-  // Selected contact for detail modal
   const [selectedContact, setSelectedContact] =
     useState<AdminContactMessageListItem | null>(null);
 
   // Selected contact for reply modal
   const [replyTargetContact, setReplyTargetContact] =
     useState<AdminContactMessageListItem | null>(null);
+
+  const [selectedRowIds, setSelectedRowIds] = useState<Record<string, boolean>>({});
+  const [selectedRows, setSelectedRows] = useState<AdminContactMessageListItem[]>([]);
+
+  useEffect(() => {
+    setSelectedRowIds({});
+    setSelectedRows([]);
+  }, [search, statusFilter, page, pageSize]);
 
   // Build query params
   const queryParams = useMemo(() => {
@@ -336,6 +346,15 @@ export default function AdminContactsPage() {
 
             <ExportExcelButton
               data={contacts}
+              fetchData={async () => {
+                const res = await getAdminContactMessages({
+                  ...queryParams,
+                  page: 1,
+                  pageSize: 10000,
+                });
+                return res?.data ?? [];
+              }}
+              totalCount={totalCount}
               filename="contact_messages"
               sheetName="Contacts"
               columns={EXPORT_PRESETS.contacts}
@@ -391,6 +410,24 @@ export default function AdminContactsPage() {
 
       {/* Data Table Container */}
       <div className="flex-1 min-h-0 min-w-0 flex flex-col w-full">
+        <BulkActionsBar
+          selectedCount={selectedRows.length}
+          entityName="contact inquiries"
+          filterNotice={search ? `Filtered by "${search}"` : undefined}
+          onClearSelection={() => {
+            setSelectedRowIds({});
+            setSelectedRows([]);
+          }}
+          onExport={() => {
+            exportToExcel({
+              filename: "selected_contacts",
+              sheetName: "Selected Contacts",
+              data: selectedRows,
+              columns: EXPORT_PRESETS.contacts,
+            });
+          }}
+        />
+
         <DataTable
           columns={columns}
           data={contacts}
@@ -407,6 +444,12 @@ export default function AdminContactsPage() {
             setPageSize(newSize);
             setPage(1);
           }}
+          selectedRowIds={selectedRowIds}
+          onRowSelectionChange={(newSelection, items) => {
+            setSelectedRowIds(newSelection);
+            setSelectedRows(items);
+          }}
+          getRowId={(row) => String(row.id)}
           className="bg-white"
           emptyMessage="No contact messages found matching your criteria."
         />

@@ -19,7 +19,7 @@ const PERIOD_OPTIONS: { id: TimePeriod; label: string }[] = [
   { id: "this_week", label: "This Week" },
   { id: "this_month", label: "This Month" },
   { id: "last_month", label: "Last Month" },
-  { id: "custom", label: "Custom" },
+  { id: "this_year", label: "This Year" },
 ];
 
 const VIEW_STATE_OPTIONS: { id: ViewState; label: string }[] = [

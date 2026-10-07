@@ -3,8 +3,10 @@
 import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useBlogs, useCreateBlog, useUpdateBlog, useDeleteBlog } from "@/features/blogs/hooks";
+import { useBlogs, useCreateBlog, useUpdateBlog, useDeleteBlog, getBlogs } from "@/features/blogs/hooks";
 import { DataTable } from "@/components/admin/data-table/DataTable";
+import { BulkActionsBar } from "@/components/admin/data-table/BulkActionsBar";
+import { exportToExcel } from "@/lib/excel-export";
 import { ExportExcelButton } from "@/components/admin/ExportExcelButton";
 import { EXPORT_PRESETS } from "@/lib/export-presets";
 import { AdminPageHeader, AdminContent } from "@/components/admin/AdminPageHeader";
@@ -36,6 +38,14 @@ export default function AdminBlogsPage() {
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingBlog, setEditingBlog] = useState<BlogListItem | null>(null);
+
+  const [selectedRowIds, setSelectedRowIds] = useState<Record<string, boolean>>({});
+  const [selectedRows, setSelectedRows] = useState<BlogListItem[]>([]);
+
+  useEffect(() => {
+    setSelectedRowIds({});
+    setSelectedRows([]);
+  }, [search, page, pageSize]);
 
   const { data, isLoading, error, refetch } = useBlogs({
     page,
@@ -219,6 +229,15 @@ export default function AdminBlogsPage() {
             <div className="flex items-center gap-2.5 flex-wrap">
               <ExportExcelButton
                 data={blogs}
+                fetchData={async () => {
+                  const res = await getBlogs({
+                    page: 1,
+                    limit: 10000,
+                    search: search.trim() || undefined,
+                  });
+                  return res?.data ?? [];
+                }}
+                totalCount={data?.meta?.total ?? blogs.length}
                 filename="blogs"
                 sheetName="Blogs"
                 columns={EXPORT_PRESETS.blogs}
@@ -237,6 +256,24 @@ export default function AdminBlogsPage() {
 
           {/* Table Container */}
           <div className="mt-6 flex-1 min-h-0 min-w-0 flex flex-col">
+            <BulkActionsBar
+              selectedCount={selectedRows.length}
+              entityName="blogs"
+              filterNotice={search ? `Filtered by "${search}"` : undefined}
+              onClearSelection={() => {
+                setSelectedRowIds({});
+                setSelectedRows([]);
+              }}
+              onExport={() => {
+                exportToExcel({
+                  filename: "selected_blogs",
+                  sheetName: "Selected Blogs",
+                  data: selectedRows,
+                  columns: EXPORT_PRESETS.blogs,
+                });
+              }}
+            />
+
             <DataTable
               columns={columns}
               data={blogs}
@@ -253,6 +290,12 @@ export default function AdminBlogsPage() {
                 setPageSize(newSize);
                 setPage(1);
               }}
+              selectedRowIds={selectedRowIds}
+              onRowSelectionChange={(newSelection, items) => {
+                setSelectedRowIds(newSelection);
+                setSelectedRows(items);
+              }}
+              getRowId={(row) => String(row.id)}
               emptyMessage={
                 search
                   ? "No blogs match your search."

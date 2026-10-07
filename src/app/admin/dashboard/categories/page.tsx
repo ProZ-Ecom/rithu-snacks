@@ -22,6 +22,7 @@ import {
   useCreateCategory,
   useUpdateCategory,
 } from "@/features/categories/hooks";
+import { getCategories } from "@/features/categories/api/get-categories";
 import { getImageUrl } from "@/lib/utils";
 import { DataTable } from "@/components/admin/data-table/DataTable";
 import { BulkActionsBar } from "@/components/admin/data-table/BulkActionsBar";
@@ -220,6 +221,15 @@ export default function AdminCategoriesPage() {
             <div className="flex items-center gap-2.5 flex-wrap">
               <ExportExcelButton
                 data={categories}
+                fetchData={async () => {
+                  const res = await getCategories({
+                    page: 1,
+                    pageSize: 10000,
+                    search: search || undefined,
+                  });
+                  return res.data;
+                }}
+                totalCount={data?.meta?.total ?? categories.length}
                 filename="categories"
                 sheetName="Categories"
                 columns={EXPORT_PRESETS.categories}

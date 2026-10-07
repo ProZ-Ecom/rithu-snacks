@@ -9,13 +9,14 @@ import {
   useBulkDeleteProducts,
   useProductImages,
 } from "@/features/products/hooks";
+import { getAdminProducts } from "@/features/products/api/get-products";
 import { useCategories } from "@/features/categories/hooks";
 import { useBrands } from "@/features/brands/hooks";
 import { useHsnCodes } from "@/features/hsn-codes/hooks";
 import { DataTable } from "@/components/admin/data-table/DataTable";
 import { BulkActionsBar } from "@/components/admin/data-table/BulkActionsBar";
 import { ExportExcelButton } from "@/components/admin/ExportExcelButton";
-import { exportToExcel } from "@/lib/excel-export";
+import { exportToExcel, exportProductsMatrixToExcel } from "@/lib/excel-export";
 import { EXPORT_PRESETS } from "@/lib/export-presets";
 import { toast } from "@/components/ui/Toast";
 import {
@@ -308,9 +309,26 @@ export default function AdminProductsPage() {
             <div className="flex items-center gap-2.5 flex-wrap">
               <ExportExcelButton
                 data={products}
-                filename="products"
+                fetchData={async () => {
+                  const res = await getAdminProducts({
+                    page: 1,
+                    limit: 10000,
+                    search: search || undefined,
+                    categoryId: selectedCategoryFilter || undefined,
+                  });
+                  return res.data;
+                }}
+                totalCount={data?.meta?.total ?? products.length}
+                filename="products_catalog"
                 sheetName="Products"
                 columns={EXPORT_PRESETS.products}
+                onCustomExport={(itemsToExport) => {
+                  exportProductsMatrixToExcel({
+                    filename: "products_catalog",
+                    sheetName: "Products",
+                    products: itemsToExport,
+                  });
+                }}
               />
 
               <Button
@@ -333,11 +351,10 @@ export default function AdminProductsPage() {
                 setSelectedRows([]);
               }}
               onExport={() => {
-                exportToExcel({
-                  filename: "selected_products",
+                exportProductsMatrixToExcel({
+                  filename: "selected_products_catalog",
                   sheetName: "Selected Products",
-                  data: selectedRows,
-                  columns: EXPORT_PRESETS.products,
+                  products: selectedRows,
                 });
               }}
               onDelete={() => setIsBulkDeleteOpen(true)}

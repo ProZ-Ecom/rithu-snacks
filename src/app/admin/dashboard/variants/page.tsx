@@ -11,13 +11,14 @@ import {
   useDeleteVariant,
   useBulkDeleteVariants,
 } from "@/features/variants/hooks";
+import { getAdminVariants } from "@/features/variants/api/get-variants";
 import { toast } from "@/components/ui/Toast";
 import { useProducts } from "@/features/products/hooks";
 import { useUnits } from "@/features/units/hooks";
 import { DataTable } from "@/components/admin/data-table/DataTable";
 import { BulkActionsBar } from "@/components/admin/data-table/BulkActionsBar";
 import { ExportExcelButton } from "@/components/admin/ExportExcelButton";
-import { exportToExcel } from "@/lib/excel-export";
+import { exportToExcel, exportVariantsMatrixToExcel } from "@/lib/excel-export";
 import { EXPORT_PRESETS } from "@/lib/export-presets";
 import {
   AdminPageHeader,
@@ -551,9 +552,26 @@ export default function AdminVariantsPage() {
 
               <ExportExcelButton
                 data={variants}
-                filename="variants"
-                sheetName="Variants"
+                fetchData={async () => {
+                  const res = await getAdminVariants({
+                    page: 1,
+                    pageSize: 10000,
+                    search: search || undefined,
+                    productIds: selectedProductFilter ? [selectedProductFilter] : undefined,
+                  });
+                  return res.data;
+                }}
+                totalCount={totalItems}
+                filename="items_catalog"
+                sheetName="Items"
                 columns={EXPORT_PRESETS.variants}
+                onCustomExport={(itemsToExport) => {
+                  exportVariantsMatrixToExcel({
+                    filename: "items_catalog",
+                    sheetName: "Items",
+                    variants: itemsToExport,
+                  });
+                }}
               />
 
               <Button
@@ -581,11 +599,10 @@ export default function AdminVariantsPage() {
                 setSelectedRows([]);
               }}
               onExport={() => {
-                exportToExcel({
-                  filename: "selected_variants",
-                  sheetName: "Selected Variants",
-                  data: selectedRows,
-                  columns: EXPORT_PRESETS.variants,
+                exportVariantsMatrixToExcel({
+                  filename: "selected_items_catalog",
+                  sheetName: "Selected Items",
+                  variants: selectedRows,
                 });
               }}
               onDelete={() => setIsBulkDeleteOpen(true)}

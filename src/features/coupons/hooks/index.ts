@@ -26,4 +26,5 @@ export function useCoupon(id: number | null) {
   });
 }
 
+export { getCoupons, getCoupon } from "../api/get-coupons";
 export { useCreateCoupon, useUpdateCoupon, useDeleteCoupon } from "./use-coupon-mutations";

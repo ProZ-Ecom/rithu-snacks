@@ -88,6 +88,29 @@ export interface CreateProductInput {
 
 export interface UpdateProductInput extends Partial<CreateProductInput> {}
 
+export interface AdminProductUnitPrice {
+  id: string;
+  sku: string;
+  basePrice: number;
+  unitValue: number;
+  unitCode: string;
+  unitName: string;
+  packSize: string;
+  stock: number;
+  isDefault: boolean;
+}
+
+export interface AdminProductItemVariant {
+  id: string;
+  name: string;
+  slug: string;
+  vegType?: string;
+  shelfLife?: string | null;
+  isActive: boolean;
+  outOfStock: boolean;
+  unitPrices: AdminProductUnitPrice[];
+}
+
 export interface AdminProductResponse {
   id: string; // Public Product UUID
   categoryId: string | null; // Public Category UUID
@@ -103,6 +126,8 @@ export interface AdminProductResponse {
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
+  variants?: AdminProductItemVariant[];
+  items?: AdminProductItemVariant[];
 }
 
 export interface GetAdminProductsParams {

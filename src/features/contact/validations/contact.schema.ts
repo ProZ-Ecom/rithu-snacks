@@ -44,9 +44,9 @@ export const adminContactListSchema = z
       .number()
       .int()
       .min(1, "pageSize must be at least 1")
-      .max(100, "pageSize cannot exceed 100")
+      .max(100000, "pageSize cannot exceed 100000")
       .default(20),
-    limit: z.number().int().min(1).max(100).optional(),
+    limit: z.number().int().min(1).max(100000).optional(),
     search: z.string().trim().optional(),
     status: z.enum(["new", "read", "replied"]).optional(),
     sortBy: z

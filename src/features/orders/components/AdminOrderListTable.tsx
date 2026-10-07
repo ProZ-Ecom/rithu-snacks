@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { ColumnDef } from "@tanstack/react-table";
 import {
   Eye,
@@ -18,7 +18,9 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { DataTable } from "@/components/admin/data-table/DataTable";
+import { BulkActionsBar } from "@/components/admin/data-table/BulkActionsBar";
 import { ExportExcelButton } from "@/components/admin/ExportExcelButton";
+import { exportToExcel } from "@/lib/excel-export";
 import { EXPORT_PRESETS } from "@/lib/export-presets";
 import { LoadingState } from "@/components/ui/loading-state";
 import { ErrorState } from "@/components/ui/error-state";
@@ -38,6 +40,7 @@ import {
   usePackAdminOrder,
   useCancelOrderAdmin,
 } from "@/features/orders/hooks";
+import { getAdminOrders } from "@/features/orders/api/get-orders";
 import { OrderDetailView } from "@/features/orders/components/OrderDetailView";
 import {
   OrderStatusBadge,
@@ -70,6 +73,15 @@ export function AdminOrderListTable({
     id: string;
     orderNumber: string;
   } | null>(null);
+
+  // Bulk Selection State
+  const [selectedRowIds, setSelectedRowIds] = useState<Record<string, boolean>>({});
+  const [selectedRows, setSelectedRows] = useState<OrderListItemResponse[]>([]);
+
+  useEffect(() => {
+    setSelectedRowIds({});
+    setSelectedRows([]);
+  }, [search, paymentFilter, page, pageSize, status]);
 
   const { data, isLoading, error, refetch } = useAdminOrders({
     page,
@@ -510,6 +522,17 @@ export function AdminOrderListTable({
 
           <ExportExcelButton
             data={orders}
+            fetchData={async () => {
+              const res = await getAdminOrders({
+                page: 1,
+                limit: 10000,
+                search: search || undefined,
+                status: status || undefined,
+                paymentStatus: (paymentFilter || undefined) as PaymentStatus | undefined,
+              });
+              return res.data;
+            }}
+            totalCount={meta?.total ?? orders.length}
             filename={`orders${status ? `_${status.toLowerCase()}` : ""}`}
             sheetName="Orders"
             columns={EXPORT_PRESETS.orders}
@@ -521,6 +544,24 @@ export function AdminOrderListTable({
 
       {/* Table & Pagination Content */}
       <div className="flex-1 min-h-0 min-w-0 flex flex-col">
+        <BulkActionsBar
+          selectedCount={selectedRows.length}
+          entityName="order"
+          filterNotice={search ? `Filtered by "${search}"` : undefined}
+          onClearSelection={() => {
+            setSelectedRowIds({});
+            setSelectedRows([]);
+          }}
+          onExport={() => {
+            exportToExcel({
+              filename: `selected_orders${status ? `_${status.toLowerCase()}` : ""}`,
+              sheetName: "Selected Orders",
+              data: selectedRows,
+              columns: EXPORT_PRESETS.orders,
+            });
+          }}
+        />
+
         {isLoading ? (
           <LoadingState text="Loading orders..." />
         ) : error ? (
@@ -545,6 +586,12 @@ export function AdminOrderListTable({
               setPageSize(newSize);
               setPage(1);
             }}
+            selectedRowIds={selectedRowIds}
+            onRowSelectionChange={(newSelection, items) => {
+              setSelectedRowIds(newSelection);
+              setSelectedRows(items);
+            }}
+            getRowId={(row) => String(row.id)}
             className="bg-white border border-cream-border"
             emptyMessage={emptyMessage}
           />

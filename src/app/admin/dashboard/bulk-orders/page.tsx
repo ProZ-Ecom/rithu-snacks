@@ -1,14 +1,17 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   useAdminBulkOrders,
+  getAdminBulkOrders,
   type AdminBulkOrderListItem,
   type BulkOrderEnquiryStatus,
   AdminBulkOrderDetailModal,
 } from "@/features/bulk-orders";
 import { DataTable } from "@/components/admin/data-table/DataTable";
+import { BulkActionsBar } from "@/components/admin/data-table/BulkActionsBar";
 import { ExportExcelButton } from "@/components/admin/ExportExcelButton";
+import { exportToExcel } from "@/lib/excel-export";
 import { EXPORT_PRESETS } from "@/lib/export-presets";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { StatsCard } from "@/components/admin/StatsCard";
@@ -38,6 +41,15 @@ export default function AdminBulkOrdersPage() {
 
   const [selectedEnquiry, setSelectedEnquiry] =
     useState<AdminBulkOrderListItem | null>(null);
+
+  // Bulk Selection State
+  const [selectedRowIds, setSelectedRowIds] = useState<Record<string, boolean>>({});
+  const [selectedRows, setSelectedRows] = useState<AdminBulkOrderListItem[]>([]);
+
+  useEffect(() => {
+    setSelectedRowIds({});
+    setSelectedRows([]);
+  }, [search, statusFilter, page, pageSize]);
 
   const queryParams = useMemo(() => {
     const params: {
@@ -340,6 +352,15 @@ export default function AdminBulkOrdersPage() {
 
             <ExportExcelButton
               data={enquiries}
+              fetchData={async () => {
+                const res = await getAdminBulkOrders({
+                  ...queryParams,
+                  page: 1,
+                  pageSize: 10000,
+                });
+                return res?.data ?? [];
+              }}
+              totalCount={totalCount}
               filename="bulk_order_enquiries"
               sheetName="Bulk Orders"
               columns={EXPORT_PRESETS.bulkOrders}
@@ -349,6 +370,24 @@ export default function AdminBulkOrdersPage() {
       </div>
 
       <div className="flex-1 min-h-0 min-w-0 flex flex-col w-full">
+        <BulkActionsBar
+          selectedCount={selectedRows.length}
+          entityName="enquiry"
+          filterNotice={search ? `Filtered by "${search}"` : undefined}
+          onClearSelection={() => {
+            setSelectedRowIds({});
+            setSelectedRows([]);
+          }}
+          onExport={() => {
+            exportToExcel({
+              filename: "selected_bulk_orders",
+              sheetName: "Selected Bulk Orders",
+              data: selectedRows,
+              columns: EXPORT_PRESETS.bulkOrders,
+            });
+          }}
+        />
+
         <DataTable
           columns={columns}
           data={enquiries}
@@ -365,6 +404,12 @@ export default function AdminBulkOrdersPage() {
             setPageSize(newSize);
             setPage(1);
           }}
+          selectedRowIds={selectedRowIds}
+          onRowSelectionChange={(newSelection, items) => {
+            setSelectedRowIds(newSelection);
+            setSelectedRows(items);
+          }}
+          getRowId={(row) => String(row.id)}
           className="bg-white"
           emptyMessage="No bulk order enquiries found matching your criteria."
         />

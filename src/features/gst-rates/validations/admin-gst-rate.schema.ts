@@ -32,7 +32,7 @@ export type UpdateAdminGstRateInput = z.infer<typeof updateAdminGstRateSchema>;
 
 export const adminGstRatesQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1).optional(),
-  pageSize: z.coerce.number().int().min(1).max(100).default(10).optional(),
+  pageSize: z.coerce.number().int().min(1).max(100000).default(10).optional(),
   search: z.string().trim().optional(),
 });
 

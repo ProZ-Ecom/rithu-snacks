@@ -437,32 +437,48 @@ export function SalesRevenueOverview({
               )}
               <div className="text-[11px] text-stone-300 font-medium truncate mt-1 pt-1 border-t border-stone-800">
                 {activePt.data.orders} Orders &bull; Top:{" "}
-                {activePt.data.topProduct || "Salem Banana Chips"}
+                {activePt.data.topProduct || (activePt.data.orders > 0 ? "Snacks" : "No Orders")}
               </div>
             </div>
           </div>
         )}
 
         {/* X-Axis Date Labels */}
-        <div className="mt-2 flex justify-between px-6 text-[11px] font-semibold text-stone-500">
+        <div className="relative mt-2 h-7 text-[11px] font-semibold text-stone-500 select-none">
           {safeData.map((item, idx) => {
             const isSelected = idx === activeIndex;
             const isItemUp = idx === 0 || values[idx] >= values[idx - 1];
+            const pt = points[idx];
+            if (!pt) return null;
+
+            // When there are more than 12 points (e.g. 30 days in a month), show milestones (1st, every 5 days, last) or active hovered point
+            const showLabel =
+              safeData.length <= 12 ||
+              idx === 0 ||
+              idx === safeData.length - 1 ||
+              (safeData.length > 20 ? (idx + 1) % 5 === 0 : (idx + 1) % 3 === 0) ||
+              isSelected;
+
+            if (!showLabel) return null;
+
+            const leftPct = (pt.x / width) * 100;
+
             return (
               <button
                 key={`${item.date}-${idx}`}
                 type="button"
                 onClick={() => setHoveredIndex(idx)}
+                style={{ left: `${leftPct}%` }}
                 className={cn(
-                  "transition-colors text-center cursor-pointer px-1 py-0.5 rounded",
+                  "absolute -translate-x-1/2 transition-all text-center cursor-pointer px-1.5 py-0.5 rounded whitespace-nowrap",
                   isSelected
                     ? isItemUp
-                      ? "font-bold text-emerald-700 underline underline-offset-4 bg-emerald-50/60"
-                      : "font-bold text-rose-700 underline underline-offset-4 bg-rose-50/60"
+                      ? "font-bold text-emerald-700 underline underline-offset-4 bg-emerald-50 ring-1 ring-emerald-200 z-10 scale-105"
+                      : "font-bold text-rose-700 underline underline-offset-4 bg-rose-50 ring-1 ring-rose-200 z-10 scale-105"
                     : "hover:text-stone-900"
                 )}
               >
-                {item.label}
+                {item.date || item.label}
               </button>
             );
           })}

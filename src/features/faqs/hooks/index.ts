@@ -8,6 +8,7 @@ import {
 } from "@tanstack/react-query";
 import { toast } from "@/components/ui/Toast";
 import { faqApi } from "../api/faq.api";
+export { faqApi };
 import type {
   CreateFaqPayload,
   UpdateFaqPayload,

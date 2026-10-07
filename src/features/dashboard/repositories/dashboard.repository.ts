@@ -41,6 +41,13 @@ function calculatePeriodRanges(period: TimePeriod = "this_month") {
     prevPeriodEnd = new Date(now.getFullYear(), now.getMonth() - 1, 0, 23, 59, 59, 999);
     const monthName = periodStart.toLocaleString("en-IN", { month: "short" });
     periodLabel = `${monthName} (Last Month)`;
+  } else if (period === "this_year") {
+    const currentYear = now.getFullYear();
+    periodStart = new Date(currentYear, 0, 1, 0, 0, 0, 0);
+    periodEnd = now;
+    prevPeriodStart = new Date(currentYear - 1, 0, 1, 0, 0, 0, 0);
+    prevPeriodEnd = new Date(currentYear - 1, now.getMonth(), now.getDate(), now.getHours(), now.getMinutes(), now.getSeconds(), now.getMilliseconds());
+    periodLabel = `${currentYear} (This Year)`;
   } else if (period === "custom") {
     periodStart = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
     prevPeriodStart = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000);
@@ -686,11 +693,11 @@ export async function getDashboardData(period: TimePeriod = "this_month"): Promi
         createdAt: true,
         totalAmount: true,
         items: {
+          where: { is_active: true },
           select: {
             product_name_snapshot: true,
             quantity: true,
           },
-          take: 1,
         },
       },
       orderBy: { createdAt: "asc" },
@@ -711,7 +718,25 @@ export async function getDashboardData(period: TimePeriod = "this_month"): Promi
       });
 
       const revenue = bucketOrders.reduce((sum, o) => sum + Number(o.totalAmount || 0), 0);
-      const topProduct = bucketOrders[0]?.items?.[0]?.product_name_snapshot || undefined;
+
+      const productCounts: Record<string, number> = {};
+      bucketOrders.forEach((o) => {
+        o.items?.forEach((it) => {
+          if (it.product_name_snapshot) {
+            productCounts[it.product_name_snapshot] =
+              (productCounts[it.product_name_snapshot] || 0) + (it.quantity || 1);
+          }
+        });
+      });
+
+      let topProduct: string | undefined = undefined;
+      let maxSold = 0;
+      for (const [pName, qty] of Object.entries(productCounts)) {
+        if (qty > maxSold) {
+          maxSold = qty;
+          topProduct = pName;
+        }
+      }
 
       return {
         date: dateStr,
@@ -786,84 +811,63 @@ export async function getDashboardData(period: TimePeriod = "this_month"): Promi
       }
     } else if (period === "this_month") {
       const currentDay = now.getDate();
-      if (currentDay <= 6) {
-        for (let d = 1; d <= currentDay; d++) {
-          const dayDate = new Date(now.getFullYear(), now.getMonth(), d);
-          const isToday = d === currentDay;
-          const slotStart = new Date(now.getFullYear(), now.getMonth(), d, 0, 0, 0, 0);
-          const slotEnd = isToday ? now : new Date(now.getFullYear(), now.getMonth(), d, 23, 59, 59, 999);
-          const dateStr = dayDate.toLocaleDateString("en-IN", { month: "short", day: "numeric" });
-          const label = isToday ? `${dateStr} (Today)` : dateStr;
-          chartData.push(aggregateBucket(label, dateStr, slotStart, slotEnd, true));
-        }
-      } else {
-        const numPoints = 6;
-        const dayStep = (currentDay - 1) / (numPoints - 1);
-        const checkpoints: number[] = [];
-        for (let i = 0; i < numPoints; i++) {
-          checkpoints.push(Math.round(1 + i * dayStep));
-        }
-
-        for (let i = 0; i < numPoints; i++) {
-          const ptDay = checkpoints[i];
-          const ptDate = new Date(now.getFullYear(), now.getMonth(), ptDay);
-          const dateStr = ptDate.toLocaleDateString("en-IN", { month: "short", day: "numeric" });
-          const isToday = i === numPoints - 1;
-          const label = isToday ? `${dateStr} (Today)` : dateStr;
-
-          const prevDay = i === 0 ? 1 : checkpoints[i - 1];
-          const nextDay = isToday ? currentDay : checkpoints[i + 1];
-
-          const startDayBound = i === 0 ? 1 : Math.round((prevDay + ptDay) / 2);
-          const endDayBound = isToday ? currentDay : Math.round((ptDay + nextDay) / 2) - 1;
-
-          const slotStart = new Date(now.getFullYear(), now.getMonth(), startDayBound, 0, 0, 0, 0);
-          const slotEnd = isToday ? now : new Date(now.getFullYear(), now.getMonth(), endDayBound, 23, 59, 59, 999);
-
-          chartData.push(aggregateBucket(label, dateStr, slotStart, slotEnd, isToday));
-        }
+      for (let d = 1; d <= currentDay; d++) {
+        const dayDate = new Date(now.getFullYear(), now.getMonth(), d);
+        const isToday = d === currentDay;
+        const slotStart = new Date(now.getFullYear(), now.getMonth(), d, 0, 0, 0, 0);
+        const slotEnd = isToday ? now : new Date(now.getFullYear(), now.getMonth(), d, 23, 59, 59, 999);
+        const dateStr = dayDate.toLocaleDateString("en-IN", { month: "short", day: "numeric" });
+        const label = isToday ? `${dateStr} (Today)` : dateStr;
+        chartData.push(aggregateBucket(label, dateStr, slotStart, slotEnd, true));
       }
     } else if (period === "last_month") {
       const lastDayOfMonth = new Date(periodEnd).getDate();
-      const numPoints = 6;
-      const dayStep = (lastDayOfMonth - 1) / (numPoints - 1);
-      const checkpoints: number[] = [];
-      for (let i = 0; i < numPoints; i++) {
-        checkpoints.push(Math.round(1 + i * dayStep));
+      for (let d = 1; d <= lastDayOfMonth; d++) {
+        const dayDate = new Date(periodStart.getFullYear(), periodStart.getMonth(), d);
+        const slotStart = new Date(periodStart.getFullYear(), periodStart.getMonth(), d, 0, 0, 0, 0);
+        const slotEnd = new Date(periodStart.getFullYear(), periodStart.getMonth(), d, 23, 59, 59, 999);
+        const dateStr = dayDate.toLocaleDateString("en-IN", { month: "short", day: "numeric" });
+        chartData.push(aggregateBucket(dateStr, dateStr, slotStart, slotEnd, true));
       }
-
-      for (let i = 0; i < numPoints; i++) {
-        const ptDay = checkpoints[i];
-        const ptDate = new Date(periodStart.getFullYear(), periodStart.getMonth(), ptDay);
-        const dateStr = ptDate.toLocaleDateString("en-IN", { month: "short", day: "numeric" });
-
-        const prevDay = i === 0 ? 1 : checkpoints[i - 1];
-        const nextDay = i === numPoints - 1 ? lastDayOfMonth : checkpoints[i + 1];
-
-        const startDayBound = i === 0 ? 1 : Math.round((prevDay + ptDay) / 2);
-        const endDayBound = i === numPoints - 1 ? lastDayOfMonth : Math.round((ptDay + nextDay) / 2) - 1;
-
-        const slotStart = new Date(periodStart.getFullYear(), periodStart.getMonth(), startDayBound, 0, 0, 0, 0);
-        const slotEnd = new Date(periodStart.getFullYear(), periodStart.getMonth(), endDayBound, 23, 59, 59, 999);
-
-        chartData.push(aggregateBucket(dateStr, dateStr, slotStart, slotEnd, i === numPoints - 1));
+    } else if (period === "this_year") {
+      const currentYear = now.getFullYear();
+      const currentMonth = now.getMonth();
+      const monthNamesShort = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      const monthNamesFull = [
+        "January",
+        "February",
+        "March",
+        "April",
+        "May",
+        "June",
+        "July",
+        "August",
+        "September",
+        "October",
+        "November",
+        "December",
+      ];
+      for (let m = 0; m <= currentMonth; m++) {
+        const monthStart = new Date(currentYear, m, 1, 0, 0, 0, 0);
+        const monthEnd = new Date(currentYear, m + 1, 0, 23, 59, 59, 999);
+        const monthShort = monthNamesShort[m];
+        const monthFull = monthNamesFull[m];
+        const isCurrent = m === currentMonth;
+        const label = isCurrent ? `${monthFull} (Current Month)` : `${monthFull} ${currentYear}`;
+        const slotEnd = isCurrent ? now : monthEnd;
+        chartData.push(aggregateBucket(label, monthShort, monthStart, slotEnd, true));
       }
     } else {
-      const numPoints = 6;
-      const totalMs = periodEnd.getTime() - periodStart.getTime();
-      const stepMs = totalMs / (numPoints - 1 || 1);
-
-      for (let i = 0; i < numPoints; i++) {
-        const ptTime = periodStart.getTime() + i * stepMs;
-        const ptDate = new Date(ptTime);
-        const dateStr = ptDate.toLocaleDateString("en-IN", { month: "short", day: "numeric" });
-        const isToday = i === numPoints - 1;
-        const label = isToday ? `${dateStr} (Today)` : dateStr;
-
-        const slotStart = new Date(periodStart.getTime() + (i === 0 ? 0 : (i - 0.5) * stepMs));
-        const slotEnd = isToday ? now : new Date(periodStart.getTime() + (i + 0.5) * stepMs);
-
-        chartData.push(aggregateBucket(label, dateStr, slotStart, slotEnd, isToday));
+      const totalDays = Math.max(1, Math.ceil((periodEnd.getTime() - periodStart.getTime()) / (24 * 3600 * 1000)));
+      const daysCount = Math.min(totalDays, 60);
+      for (let i = 0; i < daysCount; i++) {
+        const dayDate = new Date(periodStart.getTime() + i * 24 * 3600 * 1000);
+        const isLast = i === daysCount - 1;
+        const slotStart = new Date(dayDate.getFullYear(), dayDate.getMonth(), dayDate.getDate(), 0, 0, 0, 0);
+        const slotEnd = isLast ? now : new Date(dayDate.getFullYear(), dayDate.getMonth(), dayDate.getDate(), 23, 59, 59, 999);
+        const dateStr = dayDate.toLocaleDateString("en-IN", { month: "short", day: "numeric" });
+        const label = isLast ? `${dateStr} (Today)` : dateStr;
+        chartData.push(aggregateBucket(label, dateStr, slotStart, slotEnd, true));
       }
     }
 

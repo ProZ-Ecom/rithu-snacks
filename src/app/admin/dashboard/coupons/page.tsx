@@ -8,9 +8,12 @@ import {
   useCreateCoupon,
   useUpdateCoupon,
   useDeleteCoupon,
+  getCoupons,
 } from "@/features/coupons/hooks";
 import { DataTable } from "@/components/admin/data-table/DataTable";
+import { BulkActionsBar } from "@/components/admin/data-table/BulkActionsBar";
 import { ExportExcelButton } from "@/components/admin/ExportExcelButton";
+import { exportToExcel } from "@/lib/excel-export";
 import { EXPORT_PRESETS } from "@/lib/export-presets";
 import {
   AdminPageHeader,
@@ -47,6 +50,15 @@ export default function AdminCouponsPage() {
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingCoupon, setEditingCoupon] = useState<CouponListItem | null>(null);
+
+  // Bulk Selection State
+  const [selectedRowIds, setSelectedRowIds] = useState<Record<string, boolean>>({});
+  const [selectedRows, setSelectedRows] = useState<CouponListItem[]>([]);
+
+  useEffect(() => {
+    setSelectedRowIds({});
+    setSelectedRows([]);
+  }, [search, page, pageSize]);
 
   const { data, isLoading, error, refetch } = useCoupons({
     page,
@@ -290,6 +302,15 @@ export default function AdminCouponsPage() {
             <div className="flex items-center gap-2.5 flex-wrap">
               <ExportExcelButton
                 data={coupons}
+                fetchData={async () => {
+                  const res = await getCoupons({
+                    page: 1,
+                    limit: 10000,
+                    search: search.trim() || undefined,
+                  });
+                  return res?.data ?? [];
+                }}
+                totalCount={data?.meta?.total ?? coupons.length}
                 filename="coupons"
                 sheetName="Coupons"
                 columns={EXPORT_PRESETS.coupons}
@@ -308,6 +329,24 @@ export default function AdminCouponsPage() {
 
           {/* Table Container */}
           <div className="mt-6 flex-1 min-h-0 min-w-0 flex flex-col">
+            <BulkActionsBar
+              selectedCount={selectedRows.length}
+              entityName="coupon"
+              filterNotice={search ? `Filtered by "${search}"` : undefined}
+              onClearSelection={() => {
+                setSelectedRowIds({});
+                setSelectedRows([]);
+              }}
+              onExport={() => {
+                exportToExcel({
+                  filename: "selected_coupons",
+                  sheetName: "Selected Coupons",
+                  data: selectedRows,
+                  columns: EXPORT_PRESETS.coupons,
+                });
+              }}
+            />
+
             <DataTable
               columns={columns}
               data={coupons}
@@ -324,6 +363,12 @@ export default function AdminCouponsPage() {
                 setPageSize(newSize);
                 setPage(1);
               }}
+              selectedRowIds={selectedRowIds}
+              onRowSelectionChange={(newSelection, items) => {
+                setSelectedRowIds(newSelection);
+                setSelectedRows(items);
+              }}
+              getRowId={(row) => String(row.id)}
               emptyMessage={
                 search
                   ? "No coupons match your search."

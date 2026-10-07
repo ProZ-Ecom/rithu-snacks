@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useGstRates } from "@/features/gst-rates/hooks/use-gst-rates";
+import { getGstRates } from "@/features/gst-rates/api/get-gst-rates";
 import {
   useCreateGstRate,
   useUpdateGstRate,
@@ -9,7 +10,9 @@ import {
 } from "@/features/gst-rates/hooks/use-gst-rate-mutations";
 
 import { DataTable } from "@/components/admin/data-table/DataTable";
+import { BulkActionsBar } from "@/components/admin/data-table/BulkActionsBar";
 import { ExportExcelButton } from "@/components/admin/ExportExcelButton";
+import { exportToExcel } from "@/lib/excel-export";
 import { EXPORT_PRESETS } from "@/lib/export-presets";
 import {
   AdminPageHeader,
@@ -37,6 +40,15 @@ export default function AdminGstRatesPage() {
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [selectedGst, setSelectedGst] =
     useState<AdminGstRateResponse | null>(null);
+
+  // Bulk Selection State
+  const [selectedRowIds, setSelectedRowIds] = useState<Record<string, boolean>>({});
+  const [selectedRows, setSelectedRows] = useState<AdminGstRateResponse[]>([]);
+
+  useEffect(() => {
+    setSelectedRowIds({});
+    setSelectedRows([]);
+  }, [search, page, pageSize]);
 
   const { data, isLoading, error, refetch } = useGstRates({
   page,
@@ -160,6 +172,15 @@ export default function AdminGstRatesPage() {
             <div className="flex items-center gap-2.5 flex-wrap">
               <ExportExcelButton
                 data={gstRates}
+                fetchData={async () => {
+                  const res = await getGstRates({
+                    page: 1,
+                    pageSize: 10000,
+                    search: search || undefined,
+                  });
+                  return res.data;
+                }}
+                totalCount={data?.meta?.total ?? gstRates.length}
                 filename="gst_rates"
                 sheetName="GST Rates"
                 columns={EXPORT_PRESETS.gstRates}
@@ -176,6 +197,24 @@ export default function AdminGstRatesPage() {
           </div>
 
           <div className="mt-6 flex-1 min-h-0 min-w-0 flex flex-col">
+            <BulkActionsBar
+              selectedCount={selectedRows.length}
+              entityName="GST rate"
+              filterNotice={search ? `Filtered by "${search}"` : undefined}
+              onClearSelection={() => {
+                setSelectedRowIds({});
+                setSelectedRows([]);
+              }}
+              onExport={() => {
+                exportToExcel({
+                  filename: "selected_gst_rates",
+                  sheetName: "Selected GST Rates",
+                  data: selectedRows,
+                  columns: EXPORT_PRESETS.gstRates,
+                });
+              }}
+            />
+
             <DataTable
               columns={columns}
               data={gstRates}
@@ -189,6 +228,12 @@ export default function AdminGstRatesPage() {
                 setPageSize(newSize);
                 setPage(1);
               }}
+              selectedRowIds={selectedRowIds}
+              onRowSelectionChange={(newSelection, items) => {
+                setSelectedRowIds(newSelection);
+                setSelectedRows(items);
+              }}
+              getRowId={(row) => String(row.id)}
               className="bg-white"
             />
           </div>

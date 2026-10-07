@@ -7,9 +7,12 @@ import {
   useUpdateHsnCode,
   useDeleteHsnCode,
 } from "@/features/hsn-codes/hooks";
+import { getHsnCodes } from "@/features/hsn-codes/api/get-hsn-codes";
 import { useGstRates } from "@/features/gst-rates/hooks/use-gst-rates";
 import { DataTable } from "@/components/admin/data-table/DataTable";
+import { BulkActionsBar } from "@/components/admin/data-table/BulkActionsBar";
 import { ExportExcelButton } from "@/components/admin/ExportExcelButton";
+import { exportToExcel } from "@/lib/excel-export";
 import { EXPORT_PRESETS } from "@/lib/export-presets";
 import {
   AdminPageHeader,
@@ -37,6 +40,15 @@ export default function AdminHsnCodesPage() {
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [selectedHsn, setSelectedHsn] =
     useState<AdminHsnCodeResponse | null>(null);
+
+  // Bulk Selection State
+  const [selectedRowIds, setSelectedRowIds] = useState<Record<string, boolean>>({});
+  const [selectedRows, setSelectedRows] = useState<AdminHsnCodeResponse[]>([]);
+
+  useEffect(() => {
+    setSelectedRowIds({});
+    setSelectedRows([]);
+  }, [search, page, pageSize]);
 
   const { data, isLoading, error, refetch } = useHsnCodes({
   page,
@@ -160,6 +172,15 @@ export default function AdminHsnCodesPage() {
             <div className="flex items-center gap-2.5 flex-wrap">
               <ExportExcelButton
                 data={hsnCodes}
+                fetchData={async () => {
+                  const res = await getHsnCodes({
+                    page: 1,
+                    pageSize: 10000,
+                    search: search || undefined,
+                  });
+                  return res.data;
+                }}
+                totalCount={data?.meta?.total ?? hsnCodes.length}
                 filename="hsn_codes"
                 sheetName="HSN Codes"
                 columns={EXPORT_PRESETS.hsnCodes}
@@ -176,6 +197,24 @@ export default function AdminHsnCodesPage() {
           </div>
 
           <div className="mt-6 flex-1 min-h-0 min-w-0 flex flex-col">
+            <BulkActionsBar
+              selectedCount={selectedRows.length}
+              entityName="HSN code"
+              filterNotice={search ? `Filtered by "${search}"` : undefined}
+              onClearSelection={() => {
+                setSelectedRowIds({});
+                setSelectedRows([]);
+              }}
+              onExport={() => {
+                exportToExcel({
+                  filename: "selected_hsn_codes",
+                  sheetName: "Selected HSN Codes",
+                  data: selectedRows,
+                  columns: EXPORT_PRESETS.hsnCodes,
+                });
+              }}
+            />
+
             <DataTable
               columns={columns}
               data={hsnCodes}
@@ -189,6 +228,12 @@ export default function AdminHsnCodesPage() {
                 setPageSize(newSize);
                 setPage(1);
               }}
+              selectedRowIds={selectedRowIds}
+              onRowSelectionChange={(newSelection, items) => {
+                setSelectedRowIds(newSelection);
+                setSelectedRows(items);
+              }}
+              getRowId={(row) => String(row.id)}
               className="bg-white"
             />
           </div>

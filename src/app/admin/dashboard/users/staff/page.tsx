@@ -12,6 +12,8 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { AdminBreadcrumb } from "@/components/admin/AdminBreadcrumb";
 import { AdminPageHeader, AdminContent } from "@/components/admin/AdminPageHeader";
 import { DataTable } from "@/components/admin/data-table/DataTable";
+import { BulkActionsBar } from "@/components/admin/data-table/BulkActionsBar";
+import { exportToExcel } from "@/lib/excel-export";
 import { ExportExcelButton } from "@/components/admin/ExportExcelButton";
 import { EXPORT_PRESETS } from "@/lib/export-presets";
 import { StatsCard } from "@/components/admin/StatsCard";
@@ -21,7 +23,7 @@ import { Select } from "@/components/ui/select";
 import { AdminTableSkeleton } from "@/components/admin/AdminTableSkeleton";
 import { ErrorState } from "@/components/ui/error-state";
 import { ClearFiltersButton } from "@/components/common/clear-filters-button";
-import { useStaffList, useStaffCount, StaffFormModal } from "@/features/staff";
+import { useStaffList, useStaffCount, getStaffList, StaffFormModal } from "@/features/staff";
 import type { StaffResponse } from "@/features/staff/types";
 
 export default function AdminStaffPage() {
@@ -32,6 +34,14 @@ export default function AdminStaffPage() {
 
   const [isFormModalOpen, setIsFormModalOpen] = React.useState(false);
   const [selectedStaff, setSelectedStaff] = React.useState<StaffResponse | null>(null);
+
+  const [selectedRowIds, setSelectedRowIds] = React.useState<Record<string, boolean>>({});
+  const [selectedRows, setSelectedRows] = React.useState<StaffResponse[]>([]);
+
+  React.useEffect(() => {
+    setSelectedRowIds({});
+    setSelectedRows([]);
+  }, [search, statusFilter, page, pageSize]);
 
   // Map statusFilter to boolean or undefined
   const isActiveParam =
@@ -274,6 +284,15 @@ export default function AdminStaffPage() {
         <div className="flex items-center gap-2.5 flex-wrap shrink-0">
           <ExportExcelButton
             data={staffList}
+            fetchData={async () => {
+              const res = await getStaffList({
+                ...queryParams,
+                page: 1,
+                limit: 10000,
+              });
+              return res?.data ?? [];
+            }}
+            totalCount={totalCount}
             filename="staff_members"
             sheetName="Staff"
             columns={EXPORT_PRESETS.staff}
@@ -307,26 +326,52 @@ export default function AdminStaffPage() {
               />
             </div>
           ) : (
-            <DataTable
-              columns={columns}
-              data={staffList}
-              page={page}
-              pageSize={pageSize}
-              pageSizeOptions={[10, 20, 30, 50]}
-              totalItems={totalItems}
-              totalPages={totalPages}
-              onPageChange={(newPage) => setPage(newPage)}
-              onPageSizeChange={(newSize) => {
-                setPageSize(newSize);
-                setPage(1);
-              }}
-              className="bg-white border-0"
-              emptyMessage={
-                search.trim() || statusFilter !== "all"
-                  ? "No staff members matched your filter criteria."
-                  : "No staff members found. Click '+ Create Staff' to add your first staff member."
-              }
-            />
+            <>
+              <BulkActionsBar
+                selectedCount={selectedRows.length}
+                entityName="staff members"
+                filterNotice={search ? `Filtered by "${search}"` : undefined}
+                onClearSelection={() => {
+                  setSelectedRowIds({});
+                  setSelectedRows([]);
+                }}
+                onExport={() => {
+                  exportToExcel({
+                    filename: "selected_staff",
+                    sheetName: "Selected Staff",
+                    data: selectedRows,
+                    columns: EXPORT_PRESETS.staff,
+                  });
+                }}
+              />
+
+              <DataTable
+                columns={columns}
+                data={staffList}
+                page={page}
+                pageSize={pageSize}
+                pageSizeOptions={[10, 20, 30, 50]}
+                totalItems={totalItems}
+                totalPages={totalPages}
+                onPageChange={(newPage) => setPage(newPage)}
+                onPageSizeChange={(newSize) => {
+                  setPageSize(newSize);
+                  setPage(1);
+                }}
+                selectedRowIds={selectedRowIds}
+                onRowSelectionChange={(newSelection, items) => {
+                  setSelectedRowIds(newSelection);
+                  setSelectedRows(items);
+                }}
+                getRowId={(row) => String(row.id)}
+                className="bg-white border-0"
+                emptyMessage={
+                  search.trim() || statusFilter !== "all"
+                    ? "No staff members matched your filter criteria."
+                    : "No staff members found. Click '+ Create Staff' to add your first staff member."
+                }
+              />
+            </>
           )}
         </div>
       </AdminContent>

@@ -7,9 +7,12 @@ import {
   useUpdateUnit,
   useDeleteUnit,
 } from "@/features/units/hooks";
+import { getUnits } from "@/features/units/api/get-units";
 
 import { DataTable } from "@/components/admin/data-table/DataTable";
+import { BulkActionsBar } from "@/components/admin/data-table/BulkActionsBar";
 import { ExportExcelButton } from "@/components/admin/ExportExcelButton";
+import { exportToExcel } from "@/lib/excel-export";
 import { EXPORT_PRESETS } from "@/lib/export-presets";
 import {
   AdminPageHeader,
@@ -39,6 +42,15 @@ export default function AdminUnitsPage() {
 
   const [selectedUnit, setSelectedUnit] =
     useState<AdminUnitResponse | null>(null);
+
+  // Bulk Selection State
+  const [selectedRowIds, setSelectedRowIds] = useState<Record<string, boolean>>({});
+  const [selectedRows, setSelectedRows] = useState<AdminUnitResponse[]>([]);
+
+  useEffect(() => {
+    setSelectedRowIds({});
+    setSelectedRows([]);
+  }, [search, page, pageSize]);
 
   const { data, isLoading, error, refetch } = useUnits({
       page,
@@ -191,6 +203,15 @@ export default function AdminUnitsPage() {
             <div className="flex items-center gap-2.5 flex-wrap">
               <ExportExcelButton
                 data={units}
+                fetchData={async () => {
+                  const res = await getUnits({
+                    page: 1,
+                    pageSize: 10000,
+                    search: search || undefined,
+                  });
+                  return res.data;
+                }}
+                totalCount={data?.meta?.total ?? units.length}
                 filename="units"
                 sheetName="Units"
                 columns={EXPORT_PRESETS.units}
@@ -207,6 +228,24 @@ export default function AdminUnitsPage() {
           </div>
 
           <div className="mt-6 flex-1 min-h-0 min-w-0 flex flex-col">
+            <BulkActionsBar
+              selectedCount={selectedRows.length}
+              entityName="unit"
+              filterNotice={search ? `Filtered by "${search}"` : undefined}
+              onClearSelection={() => {
+                setSelectedRowIds({});
+                setSelectedRows([]);
+              }}
+              onExport={() => {
+                exportToExcel({
+                  filename: "selected_units",
+                  sheetName: "Selected Units",
+                  data: selectedRows,
+                  columns: EXPORT_PRESETS.units,
+                });
+              }}
+            />
+
             <DataTable
               columns={columns}
               data={units}
@@ -220,6 +259,12 @@ export default function AdminUnitsPage() {
                 setPageSize(newSize);
                 setPage(1);
               }}
+              selectedRowIds={selectedRowIds}
+              onRowSelectionChange={(newSelection, items) => {
+                setSelectedRowIds(newSelection);
+                setSelectedRows(items);
+              }}
+              getRowId={(row) => String(row.id)}
               className="bg-white"
             />
           </div>
