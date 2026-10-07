@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { ColumnDef } from "@tanstack/react-table";
 import {
   Eye,
@@ -17,7 +17,9 @@ import {
   Calendar,
 } from "lucide-react";
 import { DataTable } from "@/components/admin/data-table/DataTable";
+import { BulkActionsBar } from "@/components/admin/data-table/BulkActionsBar";
 import { ExportExcelButton } from "@/components/admin/ExportExcelButton";
+import { exportToExcel } from "@/lib/excel-export";
 import { EXPORT_PRESETS } from "@/lib/export-presets";
 import { LoadingState } from "@/components/ui/loading-state";
 import { ErrorState } from "@/components/ui/error-state";
@@ -29,6 +31,7 @@ import {
   useStaffDeliveriesCount,
   useAcceptDelivery,
   useMarkOutForDelivery,
+  getStaffDeliveries,
 } from "../hooks";
 import { DeliveryStatusBadge, AssignmentStatusBadge } from "./DeliveryStatusBadge";
 import { DeliveryStatsCards } from "./DeliveryStatsCards";
@@ -63,6 +66,15 @@ export function StaffDeliveryListTable({
   } | null>(null);
 
   const [timeScope, setTimeScope] = useState<"allTime" | "today">("today");
+
+  // Bulk Selection State
+  const [selectedRowIds, setSelectedRowIds] = useState<Record<string, boolean>>({});
+  const [selectedRows, setSelectedRows] = useState<StaffDeliveryListItem[]>([]);
+
+  useEffect(() => {
+    setSelectedRowIds({});
+    setSelectedRows([]);
+  }, [search, statusFilter, timeScope, page, pageSize]);
 
   // Map tab filter to backend status query
   const backendStatus =
@@ -409,6 +421,32 @@ export function StaffDeliveryListTable({
 
           <ExportExcelButton
             data={displayedDeliveries}
+            fetchData={async () => {
+              const res = await getStaffDeliveries({
+                page: 1,
+                limit: 10000,
+                search: search.trim() || undefined,
+                status: backendStatus,
+                sortBy: "createdAt",
+                sortOrder: "desc",
+              });
+              const all = res?.data ?? [];
+              if (timeScope === "today") {
+                return all.filter(
+                  (d) =>
+                    isTodayDate(d.createdAt) ||
+                    isTodayDate(d.order?.placedAt) ||
+                    isTodayDate(d.order?.createdAt) ||
+                    d.deliverySlot?.slotDate?.toLowerCase() === "today"
+                );
+              }
+              return all;
+            }}
+            totalCount={
+              timeScope === "today"
+                ? (countData?.today.total ?? displayedDeliveries.length)
+                : (meta?.total ?? deliveries.length)
+            }
             filename="my_deliveries"
             sheetName="Deliveries"
             columns={EXPORT_PRESETS.deliveryOrders}
@@ -429,6 +467,24 @@ export function StaffDeliveryListTable({
 
       {/* Data Table */}
       <div className="flex-1 min-h-0 min-w-0 flex flex-col mt-1">
+        <BulkActionsBar
+          selectedCount={selectedRows.length}
+          entityName="delivery"
+          filterNotice={search ? `Filtered by "${search}"` : undefined}
+          onClearSelection={() => {
+            setSelectedRowIds({});
+            setSelectedRows([]);
+          }}
+          onExport={() => {
+            exportToExcel({
+              filename: "selected_my_deliveries",
+              sheetName: "Selected Deliveries",
+              data: selectedRows,
+              columns: EXPORT_PRESETS.deliveryOrders,
+            });
+          }}
+        />
+
         <DataTable
           columns={columns}
           data={displayedDeliveries}
@@ -449,6 +505,12 @@ export function StaffDeliveryListTable({
             setPageSize(newSize);
             setPage(1);
           }}
+          selectedRowIds={selectedRowIds}
+          onRowSelectionChange={(newSelection, items) => {
+            setSelectedRowIds(newSelection);
+            setSelectedRows(items);
+          }}
+          getRowId={(row) => String(row.id)}
           className="bg-white"
           emptyMessage={
             timeScope === "today"

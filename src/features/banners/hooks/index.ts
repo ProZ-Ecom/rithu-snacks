@@ -8,6 +8,7 @@ import {
 } from "@tanstack/react-query";
 import { toast } from "@/components/ui/Toast";
 import { bannerApi } from "../api/get-banners";
+export { bannerApi };
 import type {
   BannerListQueryInput,
   CreateBannerPayload,

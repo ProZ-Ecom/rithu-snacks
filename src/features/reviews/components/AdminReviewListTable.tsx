@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { ColumnDef } from "@tanstack/react-table";
@@ -16,7 +16,9 @@ import {
   XCircle,
 } from "lucide-react";
 import { DataTable } from "@/components/admin/data-table/DataTable";
+import { BulkActionsBar } from "@/components/admin/data-table/BulkActionsBar";
 import { ExportExcelButton } from "@/components/admin/ExportExcelButton";
+import { exportToExcel } from "@/lib/excel-export";
 import { EXPORT_PRESETS } from "@/lib/export-presets";
 import { LoadingState } from "@/components/ui/loading-state";
 import { ErrorState } from "@/components/ui/error-state";
@@ -35,6 +37,7 @@ import {
   useUpdateReviewStatus,
   useDeleteAdminReview,
 } from "../hooks/use-admin-reviews";
+import { getAdminReviews } from "../api/admin-reviews.api";
 import type { ReviewResponse } from "../types/review.types";
 
 const RATING_FILTER_OPTIONS: SelectOption[] = [
@@ -78,6 +81,15 @@ export function AdminReviewListTable({
   const [selectedReview, setSelectedReview] = useState<ReviewResponse | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [reviewToDelete, setReviewToDelete] = useState<ReviewResponse | null>(null);
+
+  // Bulk Selection State
+  const [selectedRowIds, setSelectedRowIds] = useState<Record<string, boolean>>({});
+  const [selectedRows, setSelectedRows] = useState<ReviewResponse[]>([]);
+
+  useEffect(() => {
+    setSelectedRowIds({});
+    setSelectedRows([]);
+  }, [search, statusFilter, ratingFilter, sortBy, sortOrder, page, pageSize]);
 
   // Map tab filter to backend isApproved boolean
   const isApprovedQuery =
@@ -396,6 +408,21 @@ export function AdminReviewListTable({
 
           <ExportExcelButton
             data={reviews}
+            fetchData={async () => {
+              const res = await getAdminReviews({
+                page: 1,
+                limit: 10000,
+                search: search.trim() || undefined,
+                isApproved: isApprovedQuery,
+                rating: ratingFilter,
+                productId: initialProductId,
+                variantId: initialVariantId,
+                sortBy,
+                sortOrder,
+              });
+              return res?.data ?? [];
+            }}
+            totalCount={meta?.total ?? reviews.length}
             filename="reviews"
             sheetName="Reviews"
             columns={EXPORT_PRESETS.reviews}
@@ -454,20 +481,46 @@ export function AdminReviewListTable({
             </div>
           </div>
         ) : (
-          <DataTable
-            columns={columns}
-            data={reviews}
-            page={meta?.page ?? page}
-            pageSize={meta?.limit ?? pageSize}
-            totalItems={meta?.total ?? reviews.length}
-            totalPages={meta?.totalPages ?? (Math.ceil(reviews.length / pageSize) || 1)}
-            onPageChange={(newPage) => setPage(newPage)}
-            onPageSizeChange={(newSize) => {
-              setPageSize(newSize);
-              setPage(1);
-            }}
-            className="bg-white border border-cream-border shadow-2xs"
-          />
+          <>
+            <BulkActionsBar
+              selectedCount={selectedRows.length}
+              entityName="review"
+              filterNotice={search ? `Filtered by "${search}"` : undefined}
+              onClearSelection={() => {
+                setSelectedRowIds({});
+                setSelectedRows([]);
+              }}
+              onExport={() => {
+                exportToExcel({
+                  filename: "selected_reviews",
+                  sheetName: "Selected Reviews",
+                  data: selectedRows,
+                  columns: EXPORT_PRESETS.reviews,
+                });
+              }}
+            />
+
+            <DataTable
+              columns={columns}
+              data={reviews}
+              page={meta?.page ?? page}
+              pageSize={meta?.limit ?? pageSize}
+              totalItems={meta?.total ?? reviews.length}
+              totalPages={meta?.totalPages ?? (Math.ceil(reviews.length / pageSize) || 1)}
+              onPageChange={(newPage) => setPage(newPage)}
+              onPageSizeChange={(newSize) => {
+                setPageSize(newSize);
+                setPage(1);
+              }}
+              selectedRowIds={selectedRowIds}
+              onRowSelectionChange={(newSelection, items) => {
+                setSelectedRowIds(newSelection);
+                setSelectedRows(items);
+              }}
+              getRowId={(row) => String(row.id)}
+              className="bg-white border border-cream-border shadow-2xs"
+            />
+          </>
         )}
       </div>
 

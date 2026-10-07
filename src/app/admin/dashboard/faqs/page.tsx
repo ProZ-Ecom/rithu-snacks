@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Plus, Pencil, Trash2, ArrowUp, ArrowDown } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
@@ -9,6 +9,8 @@ import { Select } from "@/components/ui/select";
 import { Switch } from "@/components/ui/Switch";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DataTable } from "@/components/admin/data-table/DataTable";
+import { BulkActionsBar } from "@/components/admin/data-table/BulkActionsBar";
+import { exportToExcel } from "@/lib/excel-export";
 import { ExportExcelButton } from "@/components/admin/ExportExcelButton";
 import { EXPORT_PRESETS } from "@/lib/export-presets";
 import { AdminTableSkeleton } from "@/components/admin/AdminTableSkeleton";
@@ -28,6 +30,7 @@ import {
   useDeleteFaq,
   useUpdateFaqStatus,
   useUpdateFaqOrder,
+  faqApi,
 } from "@/features/faqs/hooks";
 import { FaqForm } from "@/features/faqs/components";
 import type { FaqDto, FaqStatus } from "@/features/faqs/types";
@@ -52,6 +55,14 @@ export default function AdminFaqsPage() {
     id: string;
     question: string;
   } | null>(null);
+
+  const [selectedRowIds, setSelectedRowIds] = useState<Record<string, boolean>>({});
+  const [selectedRows, setSelectedRows] = useState<FaqDto[]>([]);
+
+  useEffect(() => {
+    setSelectedRowIds({});
+    setSelectedRows([]);
+  }, [search, categoryFilter, statusFilter, page, pageSize]);
 
   const { data, isLoading, error, refetch } = useAdminFaqs({
     page,
@@ -322,6 +333,19 @@ export default function AdminFaqsPage() {
             <div className="flex items-center gap-2.5 flex-wrap">
               <ExportExcelButton
                 data={faqs}
+                fetchData={async () => {
+                  const res = await faqApi.getAdminFaqs({
+                    page: 1,
+                    limit: 10000,
+                    search: search.trim() || undefined,
+                    category: categoryFilter || undefined,
+                    status: (statusFilter || undefined) as FaqStatus | undefined,
+                    sortBy: "displayOrder",
+                    sortOrder: "asc",
+                  });
+                  return res?.data ?? [];
+                }}
+                totalCount={data?.meta?.total ?? faqs.length}
                 filename="faqs"
                 sheetName="FAQs"
                 columns={EXPORT_PRESETS.faqs}
@@ -345,6 +369,24 @@ export default function AdminFaqsPage() {
 
           {/* Data Table */}
           <div className="mt-6 flex-1 min-h-0 min-w-0 flex flex-col">
+            <BulkActionsBar
+              selectedCount={selectedRows.length}
+              entityName="FAQs"
+              filterNotice={search ? `Filtered by "${search}"` : undefined}
+              onClearSelection={() => {
+                setSelectedRowIds({});
+                setSelectedRows([]);
+              }}
+              onExport={() => {
+                exportToExcel({
+                  filename: "selected_faqs",
+                  sheetName: "Selected FAQs",
+                  data: selectedRows,
+                  columns: EXPORT_PRESETS.faqs,
+                });
+              }}
+            />
+
             <DataTable
               columns={columns}
               data={faqs}
@@ -364,6 +406,12 @@ export default function AdminFaqsPage() {
                 setPageSize(newSize);
                 setPage(1);
               }}
+              selectedRowIds={selectedRowIds}
+              onRowSelectionChange={(newSelection, items) => {
+                setSelectedRowIds(newSelection);
+                setSelectedRows(items);
+              }}
+              getRowId={(row) => String(row.id)}
               className="bg-white"
             />
           </div>

@@ -1,16 +1,20 @@
 "use client";
 
 import React, { useState } from "react";
-import { FileSpreadsheet, Download, Loader2 } from "lucide-react";
+import { FileSpreadsheet, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { exportToExcel, type ExportColumn } from "@/lib/excel-export";
+import { toast } from "@/components/ui/Toast";
 import { cn } from "@/lib/utils";
 
 export interface ExportExcelButtonProps<T = any> {
-  data: T[];
+  data?: T[];
+  fetchData?: () => Promise<T[] | undefined | null>;
+  totalCount?: number;
   filename: string;
   sheetName?: string;
   columns?: ExportColumn<T>[];
+  onCustomExport?: (data: T[]) => boolean | void | Promise<boolean | void>;
   selectedCount?: number;
   disabled?: boolean;
   variant?: "outline" | "default" | "secondary" | "ghost";
@@ -23,9 +27,12 @@ export interface ExportExcelButtonProps<T = any> {
 
 export function ExportExcelButton<T = any>({
   data,
+  fetchData,
+  totalCount,
   filename,
   sheetName,
   columns,
+  onCustomExport,
   selectedCount,
   disabled = false,
   variant = "outline",
@@ -37,26 +44,44 @@ export function ExportExcelButton<T = any>({
 }: ExportExcelButtonProps<T>) {
   const [isExporting, setIsExporting] = useState(false);
 
-  const handleExport = () => {
-    if (disabled || isExporting || !data || data.length === 0) return;
+  const handleExport = async () => {
+    if (disabled || isExporting) return;
 
     setIsExporting(true);
     onExportStart?.();
 
-    // Brief timeout to let UI indicate loading for huge datasets
-    setTimeout(() => {
-      try {
+    try {
+      let exportItems: T[] = [];
+
+      if (fetchData) {
+        const fetched = await fetchData();
+        exportItems = Array.isArray(fetched) ? fetched : [];
+      } else if (data && data.length > 0) {
+        exportItems = data;
+      }
+
+      if (exportItems.length === 0) {
+        toast.error("Export Failed", "No data available to export.");
+        return;
+      }
+
+      if (onCustomExport) {
+        await onCustomExport(exportItems);
+      } else {
         exportToExcel({
           filename,
           sheetName: sheetName || filename,
-          data,
+          data: exportItems,
           columns,
         });
-      } finally {
-        setIsExporting(false);
-        onExportEnd?.();
       }
-    }, 50);
+    } catch (err: any) {
+      console.error("Export failed:", err);
+      toast.error("Export Error", err?.message || "Failed to generate Excel export.");
+    } finally {
+      setIsExporting(false);
+      onExportEnd?.();
+    }
   };
 
   const displayText =
@@ -65,7 +90,10 @@ export function ExportExcelButton<T = any>({
       ? `Export Selected (${selectedCount})`
       : "Export Excel");
 
-  const isDataEmpty = !data || data.length === 0;
+  const isDataEmpty =
+    totalCount !== undefined
+      ? totalCount === 0
+      : !fetchData && (!data || data.length === 0);
 
   return (
     <Button
@@ -81,7 +109,7 @@ export function ExportExcelButton<T = any>({
         (disabled || isDataEmpty || isExporting) && "opacity-50 cursor-not-allowed",
         className
       )}
-      title={isDataEmpty ? "No data available to export" : `Export to ${filename}.xlsx`}
+      title={isDataEmpty ? "No data available to export" : `Export all records to ${filename}.xlsx`}
     >
       {isExporting ? (
         <Loader2 className="h-4 w-4 animate-spin text-emerald-600" />

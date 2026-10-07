@@ -10,6 +10,7 @@ import {
   deleteUser,
   resetPassword,
 } from "../api/get-users";
+export { getUsers, getUser };
 import type { GetUserParams } from "../types";
 
 export function useUsers(params?: GetUserParams) {

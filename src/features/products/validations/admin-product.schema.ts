@@ -41,7 +41,7 @@ export type UpdateAdminProductInput = z.infer<typeof updateAdminProductSchema>;
 
 export const adminProductsQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1).optional(),
-  pageSize: z.coerce.number().int().min(1).max(100).default(10).optional(),
+  pageSize: z.coerce.number().int().min(1).max(100000).default(10).optional(),
   search: z.string().trim().optional(),
 });
 
@@ -59,13 +59,13 @@ export const adminProductListSchema = z
       .number()
       .int()
       .min(1, "limit must be at least 1")
-      .max(100, "limit cannot exceed 100")
+      .max(100000, "limit cannot exceed 100000")
       .default(10),
     pageSize: z
       .number()
       .int()
       .min(1)
-      .max(100)
+      .max(100000)
       .optional(),
     search: z.string().trim().optional(),
     isActive: z.boolean().optional(),

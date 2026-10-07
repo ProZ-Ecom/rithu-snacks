@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { ColumnDef } from "@tanstack/react-table";
 import {
   Truck,
@@ -9,7 +9,9 @@ import {
   Package,
 } from "lucide-react";
 import { DataTable } from "@/components/admin/data-table/DataTable";
+import { BulkActionsBar } from "@/components/admin/data-table/BulkActionsBar";
 import { ExportExcelButton } from "@/components/admin/ExportExcelButton";
+import { exportToExcel } from "@/lib/excel-export";
 import { EXPORT_PRESETS } from "@/lib/export-presets";
 import { LoadingState } from "@/components/ui/loading-state";
 import { ErrorState } from "@/components/ui/error-state";
@@ -17,7 +19,11 @@ import { Button } from "@/components/ui/button";
 import { Select, type SelectOption } from "@/components/ui/select";
 import { SearchInput } from "@/components/ui/search-input";
 import { formatDateTime, formatPrice } from "@/lib/utils";
-import { useAdminDeliveryOrders, useAdminDeliveryStaff } from "../hooks";
+import {
+  useAdminDeliveryOrders,
+  useAdminDeliveryStaff,
+  getAdminDeliveryOrders,
+} from "../hooks";
 import { DeliveryStatusBadge, AssignmentStatusBadge } from "./DeliveryStatusBadge";
 import { AssignStaffModal } from "@/features/orders/components/AssignStaffModal";
 import type { AdminDeliveryOrderItem } from "../types/delivery.types";
@@ -33,6 +39,15 @@ export function AdminDeliveryOrdersTable() {
     id: string;
     orderNumber: string;
   } | null>(null);
+
+  // Bulk Selection State
+  const [selectedRowIds, setSelectedRowIds] = useState<Record<string, boolean>>({});
+  const [selectedRows, setSelectedRows] = useState<AdminDeliveryOrderItem[]>([]);
+
+  useEffect(() => {
+    setSelectedRowIds({});
+    setSelectedRows([]);
+  }, [search, selectedStaffId, selectedDeliveryStatus, page, pageSize]);
 
   const { data: staffData } = useAdminDeliveryStaff({
     page: 1,
@@ -320,6 +335,19 @@ export function AdminDeliveryOrdersTable() {
         <div className="flex items-center gap-2 flex-wrap self-end sm:self-auto">
           <ExportExcelButton
             data={orders}
+            fetchData={async () => {
+              const res = await getAdminDeliveryOrders({
+                page: 1,
+                limit: 10000,
+                search: search.trim() || undefined,
+                staffId: selectedStaffId || undefined,
+                deliveryStatus: (selectedDeliveryStatus || undefined) as any,
+                sortBy: "createdAt",
+                sortOrder: "desc",
+              });
+              return res?.data ?? [];
+            }}
+            totalCount={meta?.total ?? orders.length}
             filename="delivery_orders"
             sheetName="Deliveries"
             columns={EXPORT_PRESETS.deliveryOrders}
@@ -340,6 +368,24 @@ export function AdminDeliveryOrdersTable() {
 
       {/* Data Table */}
       <div className="flex-1 flex flex-col">
+        <BulkActionsBar
+          selectedCount={selectedRows.length}
+          entityName="delivery order"
+          filterNotice={search ? `Filtered by "${search}"` : undefined}
+          onClearSelection={() => {
+            setSelectedRowIds({});
+            setSelectedRows([]);
+          }}
+          onExport={() => {
+            exportToExcel({
+              filename: "selected_delivery_orders",
+              sheetName: "Selected Deliveries",
+              data: selectedRows,
+              columns: EXPORT_PRESETS.deliveryOrders,
+            });
+          }}
+        />
+
         <DataTable
           columns={columns}
           data={orders}
@@ -356,6 +402,12 @@ export function AdminDeliveryOrdersTable() {
             setPageSize(newSize);
             setPage(1);
           }}
+          selectedRowIds={selectedRowIds}
+          onRowSelectionChange={(newSelection, items) => {
+            setSelectedRowIds(newSelection);
+            setSelectedRows(items);
+          }}
+          getRowId={(row) => String(row.id)}
           className="bg-white"
           emptyMessage="No delivery orders found matching your criteria."
         />

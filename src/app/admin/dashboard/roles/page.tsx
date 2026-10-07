@@ -11,6 +11,8 @@ import {
   usePermissions,
 } from "@/features/roles/hooks";
 import { DataTable } from "@/components/admin/data-table/DataTable";
+import { BulkActionsBar } from "@/components/admin/data-table/BulkActionsBar";
+import { exportToExcel } from "@/lib/excel-export";
 import { ExportExcelButton } from "@/components/admin/ExportExcelButton";
 import { EXPORT_PRESETS } from "@/lib/export-presets";
 import { AdminPageHeader, AdminContent } from "@/components/admin/AdminPageHeader";
@@ -37,6 +39,14 @@ export default function AdminRolesPage() {
   const [editingRole, setEditingRole] = useState<RoleListItem | null>(null);
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [selectedPermissionIds, setSelectedPermissionIds] = useState<number[]>([]);
+
+  const [selectedRowIds, setSelectedRowIds] = useState<Record<string, boolean>>({});
+  const [selectedRows, setSelectedRows] = useState<RoleListItem[]>([]);
+
+  useEffect(() => {
+    setSelectedRowIds({});
+    setSelectedRows([]);
+  }, [search, page, pageSize]);
 
   const { data: rolesData, isLoading: rolesLoading, error: rolesError, refetch } = useRoles();
   const { data: permissions } = usePermissions();
@@ -238,6 +248,7 @@ export default function AdminRolesPage() {
             <div className="flex items-center gap-2.5 flex-wrap">
               <ExportExcelButton
                 data={filteredRoles}
+                totalCount={filteredRoles.length}
                 filename="roles"
                 sheetName="Roles"
                 columns={EXPORT_PRESETS.roles}
@@ -256,6 +267,24 @@ export default function AdminRolesPage() {
 
           {/* Table Container */}
           <div className="mt-6 flex-1 min-h-0 min-w-0 flex flex-col">
+            <BulkActionsBar
+              selectedCount={selectedRows.length}
+              entityName="roles"
+              filterNotice={search ? `Filtered by "${search}"` : undefined}
+              onClearSelection={() => {
+                setSelectedRowIds({});
+                setSelectedRows([]);
+              }}
+              onExport={() => {
+                exportToExcel({
+                  filename: "selected_roles",
+                  sheetName: "Selected Roles",
+                  data: selectedRows,
+                  columns: EXPORT_PRESETS.roles,
+                });
+              }}
+            />
+
             <DataTable
               columns={columns}
               data={paginatedRoles}
@@ -269,6 +298,12 @@ export default function AdminRolesPage() {
                 setPageSize(newSize);
                 setPage(1);
               }}
+              selectedRowIds={selectedRowIds}
+              onRowSelectionChange={(newSelection, items) => {
+                setSelectedRowIds(newSelection);
+                setSelectedRows(items);
+              }}
+              getRowId={(row) => String(row.id)}
               emptyMessage={
                 search
                   ? "No roles match your search."

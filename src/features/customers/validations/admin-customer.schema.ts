@@ -11,7 +11,7 @@ export const adminCustomerListSchema = z
       .number()
       .int()
       .min(1, "pageSize must be at least 1")
-      .max(100, "pageSize cannot exceed 100")
+      .max(100000, "pageSize cannot exceed 100000")
       .default(20),
     search: z.string().trim().optional(),
     status: z.enum(["active", "inactive", "banned"]).optional(),
@@ -37,7 +37,7 @@ export const adminCustomerOrdersSchema = z
       .number()
       .int()
       .min(1, "pageSize must be at least 1")
-      .max(100, "pageSize cannot exceed 100")
+      .max(100000, "pageSize cannot exceed 100000")
       .default(20),
     status: z.enum(ORDER_STATUS_ENUM).optional(),
     paymentStatus: z.enum(PAYMENT_STATUS_ENUM).optional(),

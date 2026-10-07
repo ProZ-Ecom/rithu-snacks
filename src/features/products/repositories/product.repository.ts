@@ -35,6 +35,40 @@ const productAdminInclude = Prisma.validator<Prisma.ProductInclude>()({
     },
     orderBy: [{ isPrimary: "desc" }, { sortOrder: "asc" }],
   },
+  variants: {
+    where: { deleted_at: null },
+    include: {
+      product_variant_images: {
+        where: { is_active: true },
+        select: {
+          image_url: true,
+          is_primary: true,
+        },
+      },
+      variant_unit_prices: {
+        where: { deleted_at: null },
+        include: {
+          product_units: {
+            select: {
+              id: true,
+              uuid: true,
+              name: true,
+              code: true,
+              type: true,
+            },
+          },
+          inventories: {
+            select: {
+              quantity_available: true,
+              quantity_reserved: true,
+            },
+          },
+        },
+        orderBy: [{ is_default: "desc" }, { unit_value: "asc" }],
+      },
+    },
+    orderBy: [{ is_default: "desc" }, { id: "asc" }],
+  },
 });
 
 export const productRepository = {

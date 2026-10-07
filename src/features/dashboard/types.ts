@@ -1,4 +1,4 @@
-export type TimePeriod = "today" | "this_week" | "this_month" | "last_month" | "custom";
+export type TimePeriod = "today" | "this_week" | "this_month" | "last_month" | "this_year" | "custom";
 
 export type ViewState = "live" | "skeleton" | "empty" | "error";
 

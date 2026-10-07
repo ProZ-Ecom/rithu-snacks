@@ -208,18 +208,13 @@ export const EXPORT_PRESETS = {
     return this.items;
   },
 
-  // 3. Categories: Category Name, Category Code, Description, Category Image, Sort Order
+  // 3. Categories: Category Name, Category Code, Description, Sort Order
   categories: [
     { header: "Category Name", key: "name", format: "text" },
     { header: "Category Code", key: "slug", format: "text" },
     {
       header: "Description",
       accessor: (row: any) => row.description || "—",
-      format: "text",
-    },
-    {
-      header: "Category Image",
-      accessor: (row: any) => row.image || row.icon || "—",
       format: "text",
     },
     { header: "Sort Order", key: "sortOrder", format: "number" },
@@ -842,3 +837,6 @@ export const EXPORT_PRESETS = {
     },
   ] as ExportColumn[],
 };
+
+export { exportProductsMatrixToExcel, exportVariantsMatrixToExcel } from "./excel-export";
+

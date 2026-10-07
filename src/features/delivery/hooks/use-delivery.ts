@@ -236,10 +236,6 @@ export function useAssignDelivery() {
 
   return useMutation<AssignDeliveryResult, Error, AssignDeliveryInput>({
     mutationFn: (input: AssignDeliveryInput) => assignDelivery(input),
-    meta: {
-      successMessage: "Delivery assigned to staff successfully.",
-      errorMessage: "Failed to assign delivery",
-    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: deliveryKeys.all });
       queryClient.invalidateQueries({ queryKey: orderKeys.all });
@@ -247,3 +243,10 @@ export function useAssignDelivery() {
     },
   });
 }
+
+export {
+  getStaffDeliveries,
+  getAdminDeliveryOrders,
+  getStaffDeliveryByUuid,
+  getAdminDeliveryStaff,
+} from "../api/delivery.api";

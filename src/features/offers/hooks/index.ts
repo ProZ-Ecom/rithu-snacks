@@ -108,3 +108,4 @@ export {
   useToggleOfferStatus,
   useDeleteOffer,
 } from "./use-offer-mutations";
+export { getOffers } from "../api/get-offers";

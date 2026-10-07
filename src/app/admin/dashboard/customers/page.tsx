@@ -7,10 +7,13 @@ import {
   useAdminCustomers,
   useAdminCustomersCount,
   useUpdateCustomerStatus,
+  getAdminCustomers,
   type AdminCustomerListItemDto,
 } from "@/features/customers";
 import { DataTable } from "@/components/admin/data-table/DataTable";
+import { BulkActionsBar } from "@/components/admin/data-table/BulkActionsBar";
 import { ExportExcelButton } from "@/components/admin/ExportExcelButton";
+import { exportToExcel } from "@/lib/excel-export";
 import { EXPORT_PRESETS } from "@/lib/export-presets";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { AdminBreadcrumb } from "@/components/admin/AdminBreadcrumb";
@@ -51,6 +54,15 @@ export default function AdminCustomersPage() {
   // Selected customer for block/unblock dialog
   const [statusTargetCustomer, setStatusTargetCustomer] =
     useState<AdminCustomerListItemDto | null>(null);
+
+  // Bulk Selection State
+  const [selectedRowIds, setSelectedRowIds] = useState<Record<string, boolean>>({});
+  const [selectedRows, setSelectedRows] = useState<AdminCustomerListItemDto[]>([]);
+
+  useEffect(() => {
+    setSelectedRowIds({});
+    setSelectedRows([]);
+  }, [search, statusFilter, genderFilter, verificationFilter, page, pageSize]);
 
   const { mutate: updateCustomerStatus, isPending: isUpdatingStatus } =
     useUpdateCustomerStatus();
@@ -511,6 +523,15 @@ export default function AdminCustomersPage() {
 
             <ExportExcelButton
               data={customers}
+              fetchData={async () => {
+                const res = await getAdminCustomers({
+                  ...queryParams,
+                  page: 1,
+                  pageSize: 10000,
+                });
+                return res.data;
+              }}
+              totalCount={meta?.total ?? customerCounts?.all}
               filename="customers"
               sheetName="Customers"
               columns={EXPORT_PRESETS.customers}
@@ -521,6 +542,24 @@ export default function AdminCustomersPage() {
 
       {/* Data Table Container */}
       <div className="flex-1 min-h-0 min-w-0 flex flex-col w-full">
+        <BulkActionsBar
+          selectedCount={selectedRows.length}
+          entityName="customer"
+          filterNotice={search ? `Filtered by "${search}"` : undefined}
+          onClearSelection={() => {
+            setSelectedRowIds({});
+            setSelectedRows([]);
+          }}
+          onExport={() => {
+            exportToExcel({
+              filename: "selected_customers",
+              sheetName: "Selected Customers",
+              data: selectedRows,
+              columns: EXPORT_PRESETS.customers,
+            });
+          }}
+        />
+
         <DataTable
           columns={columns}
           data={customers}
@@ -537,6 +576,12 @@ export default function AdminCustomersPage() {
             setPageSize(newSize);
             setPage(1);
           }}
+          selectedRowIds={selectedRowIds}
+          onRowSelectionChange={(newSelection, items) => {
+            setSelectedRowIds(newSelection);
+            setSelectedRows(items);
+          }}
+          getRowId={(row) => String(row.id)}
           className="bg-white"
           emptyMessage="No customers found matching your criteria."
         />
