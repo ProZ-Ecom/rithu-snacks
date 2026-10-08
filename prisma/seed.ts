@@ -147,6 +147,24 @@ async function main() {
   }
   console.log("Default banner positions created/verified");
 
+  // Default Delivery Partners
+  const stCourier = await prisma.delivery_partners.findFirst({
+    where: { code: "ST_COURIER" },
+  });
+  if (!stCourier) {
+    await prisma.delivery_partners.create({
+      data: {
+        name: "ST Courier",
+        code: "ST_COURIER",
+        contact_number: "+91 44 4000 0000",
+        is_active: true,
+        created_by: adminUser.id,
+        updated_by: adminUser.id,
+      },
+    });
+    console.log("ST Courier delivery partner seeded");
+  }
+
   console.log("\n--- Seed Complete ---");
   console.log("Admin Login: admin@rithusnacks.com / admin123");
   console.log("Customer Login: customer@example.com / customer123");

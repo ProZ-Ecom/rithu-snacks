@@ -240,3 +240,34 @@ export async function getCheckoutSummary(
   return response.data!;
 }
 
+export interface DeliveryPartnerItem {
+  id: string;
+  name: string;
+  code: string;
+  contactNumber: string | null;
+  isActive: boolean;
+}
+
+export interface ShipOrderCourierPayload {
+  deliveryPartnerId: string | number;
+  trackingNumber: string;
+  notes?: string;
+}
+
+export async function getDeliveryPartners(): Promise<DeliveryPartnerItem[]> {
+  const response = await apiClient.get<DeliveryPartnerItem[]>("/api/admin/delivery/partners");
+  return response.data || [];
+}
+
+export async function shipOrderCourier(
+  uuid: string | number,
+  payload: ShipOrderCourierPayload
+): Promise<OrderDetailResponse> {
+  const response = await apiClient.post<OrderDetailResponse>(
+    `/api/admin/orders/${uuid}/ship`,
+    payload
+  );
+  return response.data!;
+}
+
+

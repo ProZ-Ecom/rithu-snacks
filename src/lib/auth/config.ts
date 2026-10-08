@@ -236,7 +236,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 
     async jwt({ token, user }) {
       if (user) {
-        token.id = user.id;
+        token.id = (user.id as string) || "";
         token.role = (user as { role?: string }).role || "CUSTOMER";
         token.phone = (user as { phone?: string | null }).phone ?? null;
         token.status = (user as { status?: string }).status || "active";

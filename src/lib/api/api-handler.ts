@@ -84,7 +84,60 @@ export function createApiHandler(
         session = null;
       }
 
-      // 2. Fallback: Try HttpOnly access_token cookie or Authorization header
+      // 2. Fallback: Try NextAuth session cookie direct decode if auth() was empty
+      if (!session?.user) {
+        try {
+          const cookieStore = await cookies();
+          const nextAuthCookie =
+            cookieStore.get("authjs.session-token")?.value ||
+            cookieStore.get("__Secure-authjs.session-token")?.value ||
+            cookieStore.get("next-auth.session-token")?.value ||
+            cookieStore.get("__Secure-next-auth.session-token")?.value;
+
+          if (nextAuthCookie) {
+            const { decode } = await import("next-auth/jwt");
+            const secret =
+              process.env.AUTH_SECRET ||
+              process.env.NEXTAUTH_SECRET ||
+              "rithu-snacks@2026";
+            for (const salt of [
+              "authjs.session-token",
+              "__Secure-authjs.session-token",
+              "next-auth.session-token",
+              "__Secure-next-auth.session-token",
+              "",
+            ]) {
+              try {
+                const decoded = await decode({
+                  token: nextAuthCookie,
+                  secret,
+                  salt,
+                });
+                if (decoded && (decoded.id || decoded.sub || decoded.email)) {
+                  const identifier =
+                    (decoded.id as string) ||
+                    (decoded.sub as string) ||
+                    (decoded.email as string);
+                  session = {
+                    user: {
+                      id: identifier,
+                      email: (decoded.email as string) || "",
+                      role: (decoded.role as string) || "CUSTOMER",
+                      status: (decoded.status as string) || "active",
+                    },
+                    expires: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+                  } as unknown as Session;
+                  break;
+                }
+              } catch {}
+            }
+          }
+        } catch {
+          // Continue to access token check
+        }
+      }
+
+      // 3. Fallback: Try HttpOnly access_token cookie or Authorization header
       if (!session?.user) {
         let cookieStore;
         try {
@@ -109,18 +162,19 @@ export function createApiHandler(
               expires: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
             } as unknown as Session;
           } catch {
-            return apiError("Session expired. Please log in again.", 401);
+            // Token expired or invalid; session remains null
           }
         }
       }
 
       if (!session?.user) {
-        return apiError("You must be logged in", 401);
+        return apiError("Session expired. Please log in again.", 401);
       }
 
       if (options.requiredRole && options.requiredRole.length > 0) {
-        const userRole = (session.user as { role?: string }).role;
-        if (!userRole || !options.requiredRole.includes(userRole)) {
+        const userRole = ((session.user as { role?: string }).role || "").toUpperCase();
+        const allowedRoles = options.requiredRole.map((r) => r.toUpperCase());
+        if (!allowedRoles.includes(userRole)) {
           return apiError("You don't have permission", 403);
         }
       }

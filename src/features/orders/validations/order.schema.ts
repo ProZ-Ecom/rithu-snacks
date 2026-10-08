@@ -204,3 +204,14 @@ export const checkoutSummarySchema = z
   .passthrough();
 
 export type CheckoutSummarySchemaInput = z.infer<typeof checkoutSummarySchema>;
+
+export const shipOrderCourierSchema = z
+  .object({
+    deliveryPartnerId: z.union([z.string(), z.number()]),
+    trackingNumber: z.string().trim().min(3, "Tracking / AWB number is required").max(100),
+    notes: z.string().max(500).optional(),
+  })
+  .strict();
+
+export type ShipOrderCourierInput = z.infer<typeof shipOrderCourierSchema>;
+

@@ -18,8 +18,10 @@ import type {
   CancelOrderInput,
   ReturnOrderInput,
   OrderStatusTransitionInput,
+  ShipOrderCourierInput,
 } from "../validations/order.schema";
 import type { orders_order_status } from "@/generated/prisma";
+import crypto from "crypto";
 
 export const orderService = {
   async createCustomerOrder(
@@ -583,6 +585,136 @@ export const orderService = {
       orderNumber: updated.orderNumber,
       status: updated.status,
     };
+  },
+
+  async shipOrderWithCourier(
+    adminSessionUserId: string,
+    uuid: string,
+    input: ShipOrderCourierInput
+  ): Promise<OrderDetailResponse> {
+    const adminUser = await userRepository.findById(adminSessionUserId);
+    const adminId = adminUser?.internalId ?? null;
+
+    const isNumeric = /^\d+$/.test(uuid);
+    const order = await db.order.findFirst({
+      where: {
+        is_active: true,
+        OR: [
+          { uuid },
+          { orderNumber: uuid },
+          ...(isNumeric ? [{ id: BigInt(uuid) }] : []),
+        ],
+      },
+    });
+
+    if (!order) {
+      throw ApiError.notFound("Order not found");
+    }
+
+    if (["cancelled", "delivered", "returned"].includes(order.order_status)) {
+      throw ApiError.badRequest(
+        `Cannot ship order with status '${order.order_status}'`
+      );
+    }
+
+    // Resolve delivery partner
+    const isPartnerNumeric =
+      typeof input.deliveryPartnerId === "number" ||
+      /^\d+$/.test(String(input.deliveryPartnerId));
+
+    const partner = await db.delivery_partners.findFirst({
+      where: {
+        is_active: true,
+        OR: [
+          ...(isPartnerNumeric
+            ? [{ id: BigInt(input.deliveryPartnerId) }]
+            : []),
+          { code: String(input.deliveryPartnerId) },
+        ],
+      },
+    });
+
+    if (!partner) {
+      throw ApiError.notFound("Delivery partner not found or is inactive");
+    }
+
+    const trackingNum = input.trackingNumber.trim();
+    const cleanNotes = input.notes?.trim() || null;
+
+    await db.$transaction(async (tx) => {
+      // Find active shipment for this order
+      const existingShipment = await tx.shipments.findFirst({
+        where: {
+          order_id: order.id,
+          is_active: true,
+        },
+        orderBy: { id: "desc" },
+      });
+
+      if (existingShipment) {
+        await tx.shipments.update({
+          where: { id: existingShipment.id },
+          data: {
+            delivery_partner_id: partner.id,
+            tracking_number: trackingNum,
+            status: "in_transit",
+            assignment_status: "assigned",
+            shipped_at: new Date(),
+            delivery_notes: cleanNotes || existingShipment.delivery_notes,
+            updated_by: adminId,
+            updated_at: new Date(),
+          },
+        });
+      } else {
+        await tx.shipments.create({
+          data: {
+            uuid: crypto.randomUUID(),
+            order_id: order.id,
+            delivery_partner_id: partner.id,
+            tracking_number: trackingNum,
+            status: "in_transit",
+            assignment_status: "assigned",
+            shipped_at: new Date(),
+            delivery_notes: cleanNotes,
+            created_by: adminId,
+            updated_by: adminId,
+          },
+        });
+      }
+
+      // Update order status to 'shipped'
+      await tx.order.update({
+        where: { id: order.id },
+        data: {
+          order_status: "shipped",
+          updated_by: adminId,
+          updatedAt: new Date(),
+        },
+      });
+
+      // Add status history
+      const historyNote = cleanNotes
+        ? `Shipped via ${partner.name} (AWB: ${trackingNum}) - ${cleanNotes}`
+        : `Shipped via ${partner.name} (AWB: ${trackingNum})`;
+
+      await tx.order_status_history.create({
+        data: {
+          order_id: order.id,
+          status: "shipped",
+          note: historyNote,
+          created_by: adminId,
+        },
+      });
+    });
+
+    const updated = await orderRepository.findCustomerOrderByUuid(
+      order.userId,
+      order.uuid || String(order.id)
+    );
+    if (!updated) {
+      throw ApiError.internal("Failed to retrieve updated order");
+    }
+    return updated;
   },
 
   async cancelOrder(
