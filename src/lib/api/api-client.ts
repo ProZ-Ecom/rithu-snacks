@@ -141,9 +141,10 @@ async function fetchApi<T>(
       }
     }
 
-    // Refresh didn't help (or wasn't applicable, e.g. admin session) — send the
-    // user back to the correct login page instead of leaving them stuck on an error toast.
-    if (!refreshed && typeof window !== "undefined") {
+    // Refresh didn't help — for GET query requests, redirect to login so the user isn't stuck on an empty state.
+    // For mutations (POST, PUT, PATCH, DELETE), let it throw ApiClientError so the UI catches it with toast error instead of reloading the page.
+    const isMutation = Boolean(fetchOptions.method && fetchOptions.method !== "GET");
+    if (!refreshed && !isMutation && typeof window !== "undefined") {
       const isAdminEndpoint = endpoint.startsWith("/api/admin/");
       const loginPath = isAdminEndpoint ? "/admin/login" : "/login";
       if (!window.location.pathname.startsWith(loginPath)) {

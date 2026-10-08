@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import {
   MapPin,
   CreditCard,
@@ -17,11 +18,15 @@ import {
   Check,
   XCircle,
   AlertCircle,
+  Copy,
+  ExternalLink,
+  Navigation,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatDateTime, formatPrice } from "@/lib/utils";
 import { OrderItemsList } from "./OrderItemsList";
 import { OrderTotals } from "./OrderTotals";
+import { LiveTrackingModal } from "./LiveTrackingModal";
 import type { OrderDetailResponse, OrderDetail } from "../types";
 
 interface OrderDetailViewProps {
@@ -80,6 +85,9 @@ export function OrderDetailView({
   isCancelling = false,
   canCancel = false,
 }: OrderDetailViewProps) {
+  const [isLiveTrackingOpen, setIsLiveTrackingOpen] = useState(false);
+  const [copiedAwb, setCopiedAwb] = useState(false);
+
   const shippingAddress =
     ("shippingAddress" in order ? order.shippingAddress : (order as any).address) ||
     null;
@@ -96,6 +104,15 @@ export function OrderDetailView({
 
   const statusMeta = getStatusBadgeMeta(order.status);
   const paymentStatus = (order as any).paymentStatus || (order as any).payment_status;
+
+  const hasCourierTracking = Boolean(delivery?.trackingNumber);
+  const courierPartnerName = delivery?.deliveryPartner?.name || "ST Courier";
+
+  const handleCopyAwb = (awb: string) => {
+    navigator.clipboard.writeText(awb);
+    setCopiedAwb(true);
+    setTimeout(() => setCopiedAwb(false), 2500);
+  };
 
   const formattedDate = order.createdAt
     ? new Date(order.createdAt).toLocaleDateString("en-IN", {
@@ -190,7 +207,7 @@ export function OrderDetailView({
             </div>
           </div>
 
-          {/* 2. Three Info Cards: Customer, Address & Staff */}
+          {/* 2. Three Info Cards: Customer, Address & Delivery/Courier */}
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {/* Customer Details */}
             {customer && (
@@ -267,98 +284,170 @@ export function OrderDetailView({
               </div>
             )}
 
-            {/* Assigned Delivery Staff */}
-            <div className="rounded-2xl border border-theme-border bg-theme-surface shadow-2xs overflow-hidden">
-              <div className="bg-theme-surface-alt border-b border-theme-border-subtle px-4 py-3 flex items-center gap-2">
-                <Truck className="h-4 w-4 text-theme-secondary shrink-0" />
-                <h3 className="text-xs font-bold uppercase tracking-wider text-theme-text-primary">
-                  Assigned Staff
-                </h3>
-              </div>
-              <div className="p-4 text-xs space-y-2 text-theme-text-subtle">
-                {delivery?.staff ? (
-                  <>
-                    <div className="flex items-center gap-2.5">
-                      <div className="grid h-8 w-8 place-items-center rounded-xl bg-theme-surface-alt border border-theme-border text-theme-primary text-xs font-bold shrink-0">
-                        {delivery.staff.name.charAt(0).toUpperCase()}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="font-bold text-theme-text-primary truncate">
-                          {delivery.staff.name}
-                        </p>
-                        {delivery.assignmentStatus && (
-                          <div className="mt-0.5">
-                            <span
-                              className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                                delivery.assignmentStatus.toLowerCase() === "accepted"
-                                  ? "text-emerald-700 bg-emerald-50 border-emerald-200"
-                                  : delivery.assignmentStatus.toLowerCase() === "rejected"
-                                  ? "text-rose-700 bg-rose-50 border-rose-200"
-                                  : "text-amber-700 bg-amber-50 border-amber-200"
-                              }`}
-                            >
-                              {delivery.assignmentStatus.toLowerCase() === "accepted" ? (
-                                <>
-                                  <Check className="h-2.5 w-2.5" />
-                                  Accepted
-                                </>
-                              ) : delivery.assignmentStatus.toLowerCase() === "rejected" ? (
-                                <>
-                                  <XCircle className="h-2.5 w-2.5" />
-                                  Rejected
-                                </>
-                              ) : (
-                                <>
-                                  <UserCheck className="h-2.5 w-2.5" />
-                                  Pending
-                                </>
-                              )}
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                    {delivery.staff.phone && (
-                      <p className="flex items-center gap-1.5 text-xs text-theme-text-secondary font-medium">
-                        <Phone className="h-3.5 w-3.5 shrink-0 text-theme-text-muted" />
-                        <span className="font-mono">{delivery.staff.phone}</span>
-                      </p>
-                    )}
-                    {delivery.staff.email && (
-                      <p className="text-xs truncate text-theme-text-secondary font-medium">
-                        {delivery.staff.email}
-                      </p>
-                    )}
-                    {delivery.assignedAt && (
-                      <p className="text-[11px] text-theme-text-muted font-medium pt-1">
-                        Assigned on {formatDateTime(delivery.assignedAt)}
-                      </p>
-                    )}
-
-                    {delivery.assignmentStatus?.toLowerCase() === "rejected" && (
-                      <div className="mt-2 p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs">
-                        <p className="font-bold flex items-center gap-1">
-                          <AlertCircle className="h-3.5 w-3.5 text-rose-600" />
-                          Staff Rejection Reason:
-                        </p>
-                        <p className="mt-1 text-[11px] text-rose-700">
-                          {delivery.deliveryNotes || "Staff was unable to accept this delivery."}
-                        </p>
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  <div className="py-2">
-                    <span className="inline-flex items-center gap-1 text-[11px] font-bold text-theme-text-muted bg-theme-surface-alt px-2.5 py-0.5 rounded-full border border-theme-border">
-                      Unassigned
-                    </span>
-                    <p className="text-xs text-theme-text-subtle font-medium mt-2 leading-relaxed">
-                      No delivery staff assigned yet. Kitchen is packaging your order.
-                    </p>
+            {/* Delivery Dispatch Info: Courier OR In-House Staff */}
+            {hasCourierTracking ? (
+              <div className="rounded-2xl border border-blue-200 bg-linear-to-b from-blue-50/50 to-theme-surface shadow-2xs overflow-hidden">
+                <div className="bg-blue-50 border-b border-blue-100 px-4 py-3 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Navigation className="h-4 w-4 text-blue-600 shrink-0" />
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-blue-900">
+                      Courier Shipment
+                    </h3>
                   </div>
-                )}
+                  <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-blue-600 text-white">
+                    {courierPartnerName}
+                  </span>
+                </div>
+                <div className="p-4 text-xs space-y-3 text-theme-text-subtle">
+                  <div>
+                    <p className="text-[11px] font-semibold text-theme-text-muted uppercase tracking-wider">
+                      Tracking / AWB Number
+                    </p>
+                    <div className="mt-1 flex items-center justify-between gap-2 p-2 rounded-xl bg-white border border-blue-200">
+                      <span className="font-mono font-bold text-sm text-blue-900 tracking-wide select-all">
+                        {delivery?.trackingNumber}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleCopyAwb(delivery?.trackingNumber || "")}
+                        className="p-1 rounded-lg hover:bg-blue-50 text-blue-600 transition-colors cursor-pointer"
+                        title="Copy AWB number"
+                      >
+                        {copiedAwb ? (
+                          <Check className="h-4 w-4 text-emerald-600" />
+                        ) : (
+                          <Copy className="h-4 w-4" />
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  {delivery?.shippedAt && (
+                    <p className="text-[11px] text-theme-text-muted font-medium">
+                      Dispatched on {formatDateTime(delivery.shippedAt)}
+                    </p>
+                  )}
+
+                  <div className="pt-1 flex flex-col gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setIsLiveTrackingOpen(true)}
+                      className="w-full inline-flex items-center justify-center gap-2 py-2 px-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs transition-all cursor-pointer"
+                    >
+                      <span className="relative flex h-2 w-2">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-white"></span>
+                      </span>
+                      <span>Live Courier Tracking</span>
+                    </button>
+
+                    <a
+                      href={`https://stcourier.com/track/shipment?awb=${encodeURIComponent(
+                        delivery?.trackingNumber || ""
+                      )}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center justify-center gap-1.5 text-[11px] font-semibold text-blue-700 hover:text-blue-900 hover:underline pt-0.5"
+                    >
+                      <span>Open on ST Courier Portal</span>
+                      <ExternalLink className="h-3 w-3" />
+                    </a>
+                  </div>
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="rounded-2xl border border-theme-border bg-theme-surface shadow-2xs overflow-hidden">
+                <div className="bg-theme-surface-alt border-b border-theme-border-subtle px-4 py-3 flex items-center gap-2">
+                  <Truck className="h-4 w-4 text-theme-secondary shrink-0" />
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-theme-text-primary">
+                    Assigned Staff
+                  </h3>
+                </div>
+                <div className="p-4 text-xs space-y-2 text-theme-text-subtle">
+                  {delivery?.staff ? (
+                    <>
+                      <div className="flex items-center gap-2.5">
+                        <div className="grid h-8 w-8 place-items-center rounded-xl bg-theme-surface-alt border border-theme-border text-theme-primary text-xs font-bold shrink-0">
+                          {delivery.staff.name.charAt(0).toUpperCase()}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="font-bold text-theme-text-primary truncate">
+                            {delivery.staff.name}
+                          </p>
+                          {delivery.assignmentStatus && (
+                            <div className="mt-0.5">
+                              <span
+                                className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                                  delivery.assignmentStatus.toLowerCase() === "accepted"
+                                    ? "text-emerald-700 bg-emerald-50 border-emerald-200"
+                                    : delivery.assignmentStatus.toLowerCase() === "rejected"
+                                    ? "text-rose-700 bg-rose-50 border-rose-200"
+                                    : "text-amber-700 bg-amber-50 border-amber-200"
+                                }`}
+                              >
+                                {delivery.assignmentStatus.toLowerCase() === "accepted" ? (
+                                  <>
+                                    <Check className="h-2.5 w-2.5" />
+                                    Accepted
+                                  </>
+                                ) : delivery.assignmentStatus.toLowerCase() === "rejected" ? (
+                                  <>
+                                    <XCircle className="h-2.5 w-2.5" />
+                                    Rejected
+                                  </>
+                                ) : (
+                                  <>
+                                    <UserCheck className="h-2.5 w-2.5" />
+                                    Pending
+                                  </>
+                                )}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      {delivery.staff.phone && (
+                        <p className="flex items-center gap-1.5 text-xs text-theme-text-secondary font-medium">
+                          <Phone className="h-3.5 w-3.5 shrink-0 text-theme-text-muted" />
+                          <span className="font-mono">{delivery.staff.phone}</span>
+                        </p>
+                      )}
+                      {delivery.staff.email && (
+                        <p className="text-xs truncate text-theme-text-secondary font-medium">
+                          {delivery.staff.email}
+                        </p>
+                      )}
+                      {delivery.assignedAt && (
+                        <p className="text-[11px] text-theme-text-muted font-medium pt-1">
+                          Assigned on {formatDateTime(delivery.assignedAt)}
+                        </p>
+                      )}
+
+                      {delivery.assignmentStatus?.toLowerCase() === "rejected" && (
+                        <div className="mt-2 p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs">
+                          <p className="font-bold flex items-center gap-1">
+                            <AlertCircle className="h-3.5 w-3.5 text-rose-600" />
+                            Staff Rejection Reason:
+                          </p>
+                          <p className="mt-1 text-[11px] text-rose-700">
+                            {delivery.deliveryNotes || "Staff was unable to accept this delivery."}
+                          </p>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="py-2">
+                      <span className="inline-flex items-center gap-1 text-[11px] font-bold text-theme-text-muted bg-theme-surface-alt px-2.5 py-0.5 rounded-full border border-theme-border">
+                        Pending Dispatch
+                      </span>
+                      <p className="text-xs text-theme-text-subtle font-medium mt-2 leading-relaxed">
+                        No delivery staff assigned or courier dispatched yet. Order is being packaged.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Order Notes */}
@@ -443,6 +532,17 @@ export function OrderDetailView({
           </div>
         </div>
       </div>
+
+      {/* Live ST Courier Tracking Modal */}
+      {delivery?.trackingNumber && (
+        <LiveTrackingModal
+          open={isLiveTrackingOpen}
+          onClose={() => setIsLiveTrackingOpen(false)}
+          trackingNumber={delivery.trackingNumber}
+          courierName={courierPartnerName}
+          orderNumber={order.orderNumber}
+        />
+      )}
     </div>
   );
 }

@@ -16,6 +16,8 @@ import {
   Check,
   Clock,
   AlertCircle,
+  ExternalLink,
+  Send,
 } from "lucide-react";
 import { DataTable } from "@/components/admin/data-table/DataTable";
 import { BulkActionsBar } from "@/components/admin/data-table/BulkActionsBar";
@@ -32,6 +34,8 @@ import { SearchInput } from "@/components/ui/search-input";
 import { ClearFiltersButton } from "@/components/common/clear-filters-button";
 import { cn, formatDateTime, formatPrice } from "@/lib/utils";
 import { AssignStaffModal } from "@/features/orders/components/AssignStaffModal";
+import { ShipOrderModal } from "@/features/orders/components/ShipOrderModal";
+import { LiveTrackingModal } from "@/features/orders/components/LiveTrackingModal";
 import {
   useAdminOrders,
   useAdminOrder,
@@ -73,6 +77,26 @@ export function AdminOrderListTable({
     id: string;
     orderNumber: string;
   } | null>(null);
+
+  const [shipCourierOrder, setShipCourierOrder] = useState<{
+    id: string;
+    orderNumber: string;
+    customerName?: string;
+    partnerCode?: string;
+    trackingNumber?: string;
+  } | null>(null);
+
+  const [liveTrackingModal, setLiveTrackingModal] = useState<{
+    open: boolean;
+    awb: string;
+    courierName: string;
+    orderNumber?: string;
+  }>({
+    open: false,
+    awb: "",
+    courierName: "ST Courier",
+    orderNumber: "",
+  });
 
   // Bulk Selection State
   const [selectedRowIds, setSelectedRowIds] = useState<Record<string, boolean>>({});
@@ -202,23 +226,173 @@ export function AdminOrderListTable({
       cell: ({ row }) => <OrderStatusBadge status={row.original.status} />,
     },
     {
-      accessorKey: "delivery.staff",
-      header: "Assigned Staff",
+      accessorKey: "delivery",
+      header: "Delivery / Dispatch",
       cell: ({ row }) => {
         const delivery = row.original.delivery;
         const staff = delivery?.staff;
-        const isAssigned = delivery?.isAssigned && !!staff;
+        const trackingNum = delivery?.trackingNumber;
         const orderStatus = (row.original.status || "").toLowerCase();
         const assignmentStatus = (delivery?.assignmentStatus || "pending").toLowerCase();
 
-        if (!isAssigned || !staff) {
+        // 1. Courier Delivery (ST Courier / Tracking Number)
+        if (trackingNum) {
+          const partnerName = delivery.deliveryPartner?.name || "ST Courier";
+
           return (
-            <div className="flex items-center gap-1.5">
-              <span className="inline-flex items-center gap-1 text-[11px] font-medium text-neutral-500 bg-cream-100 px-2 py-0.5 rounded-full border border-cream-border">
-                <Package className="h-3 w-3 text-neutral-400" />
-                Unassigned
-              </span>
+            <div className="leading-tight max-w-[210px]">
+              <div className="flex items-center gap-1.5">
+                <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-secondary-800 bg-secondary-50 border border-secondary-200 px-2 py-0.5 rounded-full">
+                  <Truck className="h-3 w-3 text-secondary-600" />
+                  {partnerName}
+                </span>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setShipCourierOrder({
+                      id: row.original.id,
+                      orderNumber: row.original.orderNumber,
+                      customerName: row.original.customer?.name,
+                      partnerCode: delivery.deliveryPartner?.code,
+                      trackingNumber: trackingNum,
+                    })
+                  }
+                  title="Edit Courier Tracking"
+                  className="text-[10px] text-neutral-400 hover:text-secondary-600 underline cursor-pointer"
+                >
+                  Edit
+                </button>
+              </div>
+              <div className="flex items-center gap-1 text-[11px] font-mono text-neutral-700 font-semibold mt-1">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setLiveTrackingModal({
+                      open: true,
+                      awb: trackingNum,
+                      courierName: partnerName,
+                      orderNumber: row.original.orderNumber,
+                    })
+                  }
+                  title="Open Live ST Courier Tracking"
+                  className="text-secondary-700 hover:text-secondary-900 font-bold hover:underline inline-flex items-center gap-1 cursor-pointer"
+                >
+                  <span>AWB: {trackingNum}</span>
+                  <ExternalLink className="h-3 w-3 text-secondary-600" />
+                </button>
+              </div>
+            </div>
+          );
+        }
+
+        // 2. Staff Delivery (Assigned Staff)
+        if (staff) {
+          const initial = staff.name.charAt(0).toUpperCase();
+          const isAccepted = assignmentStatus === "accepted";
+          const isRejected = assignmentStatus === "rejected";
+          const isPending = !isAccepted && !isRejected;
+
+          return (
+            <div className="flex items-center justify-between gap-2 max-w-[210px]">
+              <div className="flex items-center gap-2 min-w-0">
+                <div
+                  className={cn(
+                    "grid h-7 w-7 place-items-center rounded-full text-white text-xs font-bold shrink-0",
+                    isAccepted
+                      ? "bg-emerald-600"
+                      : isRejected
+                      ? "bg-rose-500"
+                      : "bg-secondary-600"
+                  )}
+                >
+                  {initial}
+                </div>
+                <div className="min-w-0 leading-tight">
+                  <div className="flex items-center gap-1 truncate">
+                    <span
+                      className={cn(
+                        "font-semibold text-xs truncate",
+                        isRejected ? "text-neutral-500 line-through" : "text-neutral-900"
+                      )}
+                    >
+                      {staff.name}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-1 mt-0.5">
+                    {isAccepted && (
+                      <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.2 rounded">
+                        <Check className="h-2.5 w-2.5" />
+                        Accepted
+                      </span>
+                    )}
+                    {isPending && (
+                      <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.2 rounded">
+                        <Clock className="h-2.5 w-2.5" />
+                        Pending
+                      </span>
+                    )}
+                    {isRejected && (
+                      <span
+                        className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-rose-700 bg-rose-50 border border-rose-200 px-1.5 py-0.2 rounded"
+                        title={delivery?.deliveryNotes || "Rejected by staff"}
+                      >
+                        <AlertCircle className="h-2.5 w-2.5" />
+                        Rejected
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
               {orderStatus === "packed" && (
+                <>
+                  {isPending && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setAssignStaffOrder({
+                          id: row.original.id,
+                          orderNumber: row.original.orderNumber,
+                        })
+                      }
+                      title="Change / Reassign Delivery Staff"
+                      className="text-[11px] font-semibold text-secondary-600 hover:underline cursor-pointer shrink-0"
+                    >
+                      Change
+                    </button>
+                  )}
+
+                  {isRejected && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setAssignStaffOrder({
+                          id: row.original.id,
+                          orderNumber: row.original.orderNumber,
+                        })
+                      }
+                      title="Reassign a new Delivery Staff member"
+                      className="text-[11px] font-bold text-rose-700 hover:underline cursor-pointer shrink-0"
+                    >
+                      Reassign
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
+          );
+        }
+
+        // 3. Unassigned / Pending
+        return (
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="inline-flex items-center gap-1 text-[11px] font-medium text-neutral-500 bg-cream-100 px-2 py-0.5 rounded-full border border-cream-border">
+              <Package className="h-3 w-3 text-neutral-400" />
+              Unassigned
+            </span>
+            {["confirmed", "processing", "packed"].includes(orderStatus) && (
+              <div className="flex items-center gap-1">
                 <button
                   type="button"
                   onClick={() =>
@@ -227,110 +401,27 @@ export function AdminOrderListTable({
                       orderNumber: row.original.orderNumber,
                     })
                   }
-                  title="Assign Staff"
-                  className="text-[11px] font-semibold text-secondary-600 hover:underline cursor-pointer ml-0.5"
+                  title="Assign Delivery Staff"
+                  className="text-[11px] font-semibold text-secondary-600 hover:underline cursor-pointer"
                 >
-                  Assign
+                  Staff
                 </button>
-              )}
-            </div>
-          );
-        }
-
-        const initial = staff.name.charAt(0).toUpperCase();
-        const isAccepted = assignmentStatus === "accepted";
-        const isRejected = assignmentStatus === "rejected";
-        const isPending = !isAccepted && !isRejected;
-
-        return (
-          <div className="flex items-center justify-between gap-2 max-w-[210px]">
-            <div className="flex items-center gap-2 min-w-0">
-              <div
-                className={cn(
-                  "grid h-7 w-7 place-items-center rounded-full text-white text-xs font-bold shrink-0",
-                  isAccepted
-                    ? "bg-emerald-600"
-                    : isRejected
-                    ? "bg-rose-500"
-                    : "bg-secondary-600"
-                )}
-              >
-                {initial}
+                <span className="text-neutral-300">|</span>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setShipCourierOrder({
+                      id: row.original.id,
+                      orderNumber: row.original.orderNumber,
+                      customerName: row.original.customer?.name,
+                    })
+                  }
+                  title="Ship via ST Courier"
+                  className="text-[11px] font-semibold text-amber-700 hover:underline cursor-pointer"
+                >
+                  Courier
+                </button>
               </div>
-              <div className="min-w-0 leading-tight">
-                <div className="flex items-center gap-1 truncate">
-                  <span
-                    className={cn(
-                      "font-semibold text-xs truncate",
-                      isRejected ? "text-neutral-500 line-through" : "text-neutral-900"
-                    )}
-                  >
-                    {staff.name}
-                  </span>
-                </div>
-
-                <div className="flex items-center gap-1 mt-0.5">
-                  {isAccepted && (
-                    <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.2 rounded">
-                      <Check className="h-2.5 w-2.5" />
-                      Accepted
-                    </span>
-                  )}
-                  {isPending && (
-                    <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.2 rounded">
-                      <Clock className="h-2.5 w-2.5" />
-                      Pending
-                    </span>
-                  )}
-                  {isRejected && (
-                    <span
-                      className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-rose-700 bg-rose-50 border border-rose-200 px-1.5 py-0.2 rounded"
-                      title={delivery?.deliveryNotes || "Rejected by staff"}
-                    >
-                      <AlertCircle className="h-2.5 w-2.5" />
-                      Rejected
-                    </span>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {orderStatus === "packed" && (
-              <>
-                {/* Allowed to change only before staff acceptance */}
-                {isPending && (
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setAssignStaffOrder({
-                        id: row.original.id,
-                        orderNumber: row.original.orderNumber,
-                      })
-                    }
-                    title="Change / Reassign Delivery Staff"
-                    className="text-[11px] font-semibold text-secondary-600 hover:underline cursor-pointer shrink-0"
-                  >
-                    Change
-                  </button>
-                )}
-
-                {/* If rejected, allow reassigning new staff */}
-                {isRejected && (
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setAssignStaffOrder({
-                        id: row.original.id,
-                        orderNumber: row.original.orderNumber,
-                      })
-                    }
-                    title="Reassign a new Delivery Staff member"
-                    className="text-[11px] font-bold text-rose-700 hover:underline cursor-pointer shrink-0"
-                  >
-                    Reassign
-                  </button>
-                )}
-              </>
             )}
           </div>
         );
@@ -426,7 +517,7 @@ export function AdminOrderListTable({
 
             {orderStatus === "packed" && (
               <>
-                {/* If staff is already accepted, do not show assign/reassign quick button */}
+                {/* 1. Staff assignment button (if not already accepted by staff) */}
                 {row.original.delivery?.assignmentStatus?.toLowerCase() !== "accepted" && (
                   <button
                     type="button"
@@ -456,7 +547,45 @@ export function AdminOrderListTable({
                     <Truck className="h-3.5 w-3.5" />
                   </button>
                 )}
+
+                {/* 2. Ship via Courier button */}
+                <button
+                  type="button"
+                  onClick={() =>
+                    setShipCourierOrder({
+                      id: row.original.id,
+                      orderNumber: row.original.orderNumber,
+                      customerName: row.original.customer?.name,
+                      partnerCode: row.original.delivery?.deliveryPartner?.code,
+                      trackingNumber: row.original.delivery?.trackingNumber || "",
+                    })
+                  }
+                  title="Ship via Courier (ST Courier)"
+                  className="grid h-8 w-8 place-items-center rounded-lg border border-amber-600 bg-amber-600 text-white hover:bg-amber-700 text-xs font-semibold transition-all cursor-pointer shadow-xs"
+                  disabled={isTransitionPending}
+                >
+                  <Send className="h-3.5 w-3.5" />
+                </button>
               </>
+            )}
+
+            {/* Quick Live Tracking Button for Active Courier Shipments */}
+            {row.original.delivery?.trackingNumber && (
+              <button
+                type="button"
+                onClick={() =>
+                  setLiveTrackingModal({
+                    open: true,
+                    awb: row.original.delivery!.trackingNumber!,
+                    courierName: row.original.delivery?.deliveryPartner?.name || "ST Courier",
+                    orderNumber: row.original.orderNumber,
+                  })
+                }
+                title="Live Shipment Tracking"
+                className="grid h-8 w-8 place-items-center rounded-lg border border-secondary-600 bg-secondary-50 text-secondary-700 hover:bg-secondary-100 text-xs font-semibold transition-all cursor-pointer shadow-xs"
+              >
+                <Truck className="h-3.5 w-3.5 text-secondary-700 animate-pulse" />
+              </button>
             )}
 
             <button
@@ -709,22 +838,42 @@ export function AdminOrderListTable({
                 )}
 
                 {currentDetailStatus === "packed" && (
-                  <Button
-                    size="sm"
-                    className="bg-secondary-600 hover:bg-secondary-700 text-white cursor-pointer"
-                    onClick={() => {
-                      setAssignStaffOrder({
-                        id: orderDetail.id,
-                        orderNumber: orderDetail.orderNumber,
-                      });
-                    }}
-                    disabled={isTransitionPending}
-                  >
-                    <Truck className="mr-1.5 h-4 w-4" />
-                    {orderDetail.delivery?.isAssigned && orderDetail.delivery?.staff
-                      ? "Reassign Delivery Staff"
-                      : "Assign Delivery Staff"}
-                  </Button>
+                  <>
+                    <Button
+                      size="sm"
+                      className="bg-secondary-600 hover:bg-secondary-700 text-white cursor-pointer"
+                      onClick={() => {
+                        setAssignStaffOrder({
+                          id: orderDetail.id,
+                          orderNumber: orderDetail.orderNumber,
+                        });
+                      }}
+                      disabled={isTransitionPending}
+                    >
+                      <Truck className="mr-1.5 h-4 w-4" />
+                      {orderDetail.delivery?.isAssigned && orderDetail.delivery?.staff
+                        ? "Reassign Staff"
+                        : "Assign Staff"}
+                    </Button>
+
+                    <Button
+                      size="sm"
+                      className="bg-amber-600 hover:bg-amber-700 text-white cursor-pointer"
+                      onClick={() => {
+                        setShipCourierOrder({
+                          id: orderDetail.id,
+                          orderNumber: orderDetail.orderNumber,
+                          customerName: orderDetail.customer?.name,
+                          partnerCode: orderDetail.delivery?.deliveryPartner?.code,
+                          trackingNumber: orderDetail.delivery?.trackingNumber || "",
+                        });
+                      }}
+                      disabled={isTransitionPending}
+                    >
+                      <Send className="mr-1.5 h-4 w-4" />
+                      Ship via Courier
+                    </Button>
+                  </>
                 )}
 
                 <Button
@@ -775,6 +924,34 @@ export function AdminOrderListTable({
             refetchDetail();
           }
         }}
+      />
+
+      {/* Ship Order via Courier Modal */}
+      <ShipOrderModal
+        open={!!shipCourierOrder}
+        onClose={() => setShipCourierOrder(null)}
+        orderId={shipCourierOrder?.id ?? null}
+        orderNumber={shipCourierOrder?.orderNumber}
+        customerName={shipCourierOrder?.customerName}
+        initialPartnerCode={shipCourierOrder?.partnerCode}
+        initialTrackingNumber={shipCourierOrder?.trackingNumber}
+        onSuccess={() => {
+          refetch();
+          if (viewOrderId) {
+            refetchDetail();
+          }
+        }}
+      />
+
+      {/* Live In-App Courier Tracking Modal */}
+      <LiveTrackingModal
+        open={liveTrackingModal.open}
+        onClose={() =>
+          setLiveTrackingModal((prev) => ({ ...prev, open: false }))
+        }
+        awb={liveTrackingModal.awb}
+        courierName={liveTrackingModal.courierName}
+        orderNumber={liveTrackingModal.orderNumber}
       />
 
       {/* Cancel Order Dialog */}

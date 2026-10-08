@@ -7,6 +7,13 @@ export interface DeliveryStaffBasic {
   isActive?: boolean;
 }
 
+export interface DeliveryPartnerBasic {
+  id: string;
+  name: string;
+  code: string;
+  contactNumber: string | null;
+}
+
 export interface DeliverySlotInfo {
   id: string; // Slot UUID
   slotDate: string | null;
@@ -49,6 +56,7 @@ export interface ShipmentInfo {
   shippedAt: Date | null;
   deliveredAt: Date | null;
   deliveryStaff: DeliveryStaffBasic | null;
+  deliveryPartner?: DeliveryPartnerBasic | null;
   trackingHistory?: ShipmentTrackingItem[];
   createdAt: Date;
   updatedAt: Date;

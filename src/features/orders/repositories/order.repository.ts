@@ -113,6 +113,14 @@ export const orderDetailInclude = Prisma.validator<Prisma.OrderInclude>()({
           phone: true,
         },
       },
+      delivery_partners: {
+        select: {
+          id: true,
+          name: true,
+          code: true,
+          contact_number: true,
+        },
+      },
     },
   },
 });
@@ -189,6 +197,10 @@ export function formatOrderDelivery(
     id: bigint;
     uuid: string | null;
     assignment_status: string | null;
+    tracking_number?: string | null;
+    delivery_partner_id?: bigint | null;
+    status?: string | null;
+    shipped_at?: Date | null;
     delivery_notes?: string | null;
     created_at: Date;
     accepted_at: Date | null;
@@ -200,6 +212,12 @@ export function formatOrderDelivery(
       email?: string | null;
       phone: string | null;
     } | null;
+    delivery_partners?: {
+      id: bigint;
+      name: string;
+      code: string;
+      contact_number?: string | null;
+    } | null;
   }> | null
 ) {
   if (!shipments || shipments.length === 0) {
@@ -209,14 +227,20 @@ export function formatOrderDelivery(
       deliveryId: null,
       staff: null,
       assignedAt: null,
+      trackingNumber: null,
+      deliveryPartnerId: null,
+      deliveryPartner: null,
+      status: null,
+      shippedAt: null,
       deliveryNotes: null,
     };
   }
 
   const latest = shipments[0];
   const staff = latest.delivery_staff;
+  const partner = latest.delivery_partners;
 
-  const isAssigned = Boolean(staff);
+  const isAssigned = Boolean(staff) || Boolean(partner) || latest.assignment_status !== null;
 
   return {
     isAssigned,
@@ -231,6 +255,18 @@ export function formatOrderDelivery(
         }
       : null,
     assignedAt: latest.created_at ? latest.created_at.toISOString() : null,
+    trackingNumber: latest.tracking_number ?? null,
+    deliveryPartnerId: latest.delivery_partner_id ? String(latest.delivery_partner_id) : null,
+    deliveryPartner: partner
+      ? {
+          id: String(partner.id),
+          name: partner.name,
+          code: partner.code,
+          contactNumber: partner.contact_number ?? null,
+        }
+      : null,
+    status: latest.status ?? null,
+    shippedAt: latest.shipped_at ? latest.shipped_at.toISOString() : null,
     deliveryNotes: latest.delivery_notes ?? null,
   };
 }
@@ -871,6 +907,14 @@ export const orderRepository = {
                   name: true,
                   email: true,
                   phone: true,
+                },
+              },
+              delivery_partners: {
+                select: {
+                  id: true,
+                  name: true,
+                  code: true,
+                  contact_number: true,
                 },
               },
             },

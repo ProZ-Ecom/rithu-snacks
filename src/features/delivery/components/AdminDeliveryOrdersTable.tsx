@@ -7,6 +7,9 @@ import {
   RotateCcw,
   UserCheck,
   Package,
+  Navigation,
+  Send,
+  ExternalLink,
 } from "lucide-react";
 import { DataTable } from "@/components/admin/data-table/DataTable";
 import { BulkActionsBar } from "@/components/admin/data-table/BulkActionsBar";
@@ -26,6 +29,8 @@ import {
 } from "../hooks";
 import { DeliveryStatusBadge, AssignmentStatusBadge } from "./DeliveryStatusBadge";
 import { AssignStaffModal } from "@/features/orders/components/AssignStaffModal";
+import { ShipOrderModal } from "@/features/orders/components/ShipOrderModal";
+import { LiveTrackingModal } from "@/features/orders/components/LiveTrackingModal";
 import type { AdminDeliveryOrderItem } from "../types/delivery.types";
 
 export function AdminDeliveryOrdersTable() {
@@ -38,6 +43,17 @@ export function AdminDeliveryOrdersTable() {
   const [assignModalOrder, setAssignModalOrder] = useState<{
     id: string;
     orderNumber: string;
+  } | null>(null);
+
+  const [shipModalOrder, setShipModalOrder] = useState<{
+    id: string;
+    orderNumber: string;
+  } | null>(null);
+
+  const [liveTrackingData, setLiveTrackingData] = useState<{
+    trackingNumber: string;
+    courierName?: string;
+    orderNumber?: string;
   } | null>(null);
 
   // Bulk Selection State
@@ -130,9 +146,43 @@ export function AdminDeliveryOrdersTable() {
     },
     {
       accessorKey: "shipment.deliveryStaff",
-      header: "Assigned Staff",
+      header: "Assigned Staff / Courier",
       cell: ({ row }) => {
-        const staff = row.original.shipment?.deliveryStaff;
+        const shipment = row.original.shipment;
+        const hasCourier = Boolean(shipment?.deliveryPartner || shipment?.trackingNumber);
+        const staff = shipment?.deliveryStaff;
+
+        if (hasCourier) {
+          const partnerName = shipment?.deliveryPartner?.name || "ST Courier";
+          return (
+            <div className="leading-snug">
+              <div className="flex items-center gap-1.5">
+                <span className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200">
+                  <Navigation className="h-3 w-3 text-blue-600" />
+                  {partnerName}
+                </span>
+              </div>
+              {shipment?.trackingNumber && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setLiveTrackingData({
+                      trackingNumber: shipment.trackingNumber || "",
+                      courierName: partnerName,
+                      orderNumber: row.original.orderNumber,
+                    })
+                  }
+                  className="font-mono text-[11px] text-blue-600 hover:text-blue-800 hover:underline font-bold mt-1 flex items-center gap-1 cursor-pointer"
+                  title="Click to view Live ST Courier tracking"
+                >
+                  <span>AWB: {shipment.trackingNumber}</span>
+                  <ExternalLink className="h-2.5 w-2.5 inline" />
+                </button>
+              )}
+            </div>
+          );
+        }
+
         if (!staff) {
           return (
             <span className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
@@ -200,14 +250,16 @@ export function AdminDeliveryOrdersTable() {
         const shipment = row.original.shipment;
         const assignmentStatus = (shipment?.assignmentStatus || "pending").toLowerCase();
         const hasStaff = Boolean(shipment?.deliveryStaff);
+        const hasCourier = Boolean(shipment?.deliveryPartner || shipment?.trackingNumber);
 
-        const canAssign = isPacked && (!shipment || !hasStaff);
+        const canAssignStaff = isPacked && (!shipment || (!hasStaff && !hasCourier));
+        const canShipCourier = isPacked && (!shipment || (!hasStaff && !hasCourier));
         const canChange = isPacked && hasStaff && assignmentStatus === "pending";
         const canReassign = isPacked && hasStaff && assignmentStatus === "rejected";
 
         return (
-          <div className="flex items-center justify-center gap-1.5">
-            {canAssign && (
+          <div className="flex items-center justify-center gap-1.5 flex-wrap">
+            {canAssignStaff && (
               <button
                 type="button"
                 onClick={() =>
@@ -216,11 +268,46 @@ export function AdminDeliveryOrdersTable() {
                     orderNumber: row.original.orderNumber,
                   })
                 }
-                title="Assign Delivery Staff"
-                className="inline-flex items-center gap-1 h-8 px-2.5 rounded-lg border border-secondary-600 bg-secondary-600 text-xs font-semibold text-white hover:bg-secondary-700 transition-all cursor-pointer shadow-xs"
+                title="Assign In-House Delivery Staff"
+                className="inline-flex items-center gap-1 h-8 px-2 rounded-lg border border-secondary-600 bg-secondary-600 text-xs font-semibold text-white hover:bg-secondary-700 transition-all cursor-pointer shadow-xs"
               >
-                <UserCheck className="h-3.5 w-3.5" />
-                <span>Assign</span>
+                <UserCheck className="h-3 w-3" />
+                <span>Staff</span>
+              </button>
+            )}
+
+            {canShipCourier && (
+              <button
+                type="button"
+                onClick={() =>
+                  setShipModalOrder({
+                    id: row.original.id,
+                    orderNumber: row.original.orderNumber,
+                  })
+                }
+                title="Ship via ST Courier / Courier Partner"
+                className="inline-flex items-center gap-1 h-8 px-2 rounded-lg border border-blue-600 bg-blue-600 text-xs font-semibold text-white hover:bg-blue-700 transition-all cursor-pointer shadow-xs"
+              >
+                <Send className="h-3 w-3" />
+                <span>Courier</span>
+              </button>
+            )}
+
+            {hasCourier && shipment?.trackingNumber && (
+              <button
+                type="button"
+                onClick={() =>
+                  setLiveTrackingData({
+                    trackingNumber: shipment.trackingNumber || "",
+                    courierName: shipment.deliveryPartner?.name || "ST Courier",
+                    orderNumber: row.original.orderNumber,
+                  })
+                }
+                title="Live ST Courier Tracking"
+                className="inline-flex items-center gap-1 h-8 px-2.5 rounded-lg border border-blue-200 bg-blue-50 text-xs font-semibold text-blue-700 hover:bg-blue-100 transition-all cursor-pointer shadow-xs"
+              >
+                <Navigation className="h-3.5 w-3.5 text-blue-600" />
+                <span>Track</span>
               </button>
             )}
 
@@ -421,6 +508,26 @@ export function AdminDeliveryOrdersTable() {
         orderNumber={assignModalOrder?.orderNumber}
         onSuccess={() => refetch()}
       />
+
+      {/* Ship Courier Modal */}
+      <ShipOrderModal
+        open={Boolean(shipModalOrder)}
+        onClose={() => setShipModalOrder(null)}
+        orderId={shipModalOrder?.id ?? null}
+        orderNumber={shipModalOrder?.orderNumber}
+        onSuccess={() => refetch()}
+      />
+
+      {/* Live ST Courier Tracking Modal */}
+      {liveTrackingData && (
+        <LiveTrackingModal
+          open={Boolean(liveTrackingData)}
+          onClose={() => setLiveTrackingData(null)}
+          trackingNumber={liveTrackingData.trackingNumber}
+          courierName={liveTrackingData.courierName}
+          orderNumber={liveTrackingData.orderNumber}
+        />
+      )}
     </div>
   );
 }

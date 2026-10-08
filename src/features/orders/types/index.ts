@@ -64,12 +64,24 @@ export interface OrderDeliveryStaffDto {
   phone: string | null;
 }
 
+export interface OrderDeliveryPartnerDto {
+  id: string;
+  name: string;
+  code: string;
+  contactNumber: string | null;
+}
+
 export interface OrderDeliveryDto {
   isAssigned: boolean;
   assignmentStatus: string | null;
   deliveryId: string | null;
   staff: OrderDeliveryStaffDto | null;
   assignedAt: Date | string | null;
+  trackingNumber?: string | null;
+  deliveryPartnerId?: string | null;
+  deliveryPartner?: OrderDeliveryPartnerDto | null;
+  status?: string | null;
+  shippedAt?: Date | string | null;
   deliveryNotes?: string | null;
 }
 
@@ -273,5 +285,47 @@ export interface AdminOrdersCountResponse {
   returned: number;
   total: number;
 }
+
+export interface DeliveryPartnerItem {
+  id: string;
+  name: string;
+  code: string;
+  contactNumber: string | null;
+  isActive: boolean;
+}
+
+export interface ShipOrderCourierPayload {
+  deliveryPartnerId: string | number;
+  trackingNumber: string;
+  notes?: string;
+}
+
+export interface TrackingCheckpoint {
+  date: string;
+  status: string;
+  location: string;
+  isDelivered?: boolean;
+}
+
+export interface TrackingSummary {
+  awb: string;
+  currentStatus: string;
+  origin?: string;
+  destination?: string;
+  consignment?: string;
+  bookingDate?: string;
+  deliveryDate?: string;
+}
+
+export interface TrackingResult {
+  success: boolean;
+  awb: string;
+  courier: string;
+  summary?: TrackingSummary;
+  checkpoints: TrackingCheckpoint[];
+  error?: string;
+  officialUrl?: string;
+}
+
 
 
