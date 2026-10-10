@@ -81,6 +81,7 @@ function toVariantListItemDto(
     uuid: string;
     variant_name: string | null;
     out_of_stock?: boolean;
+    is_featured?: boolean;
     ingredients?: string | null;
     is_ready_to_mix?: boolean;
     cooking_recipe?: string | null;
@@ -139,6 +140,7 @@ function toVariantListItemDto(
       isPrimary: Boolean((img as { is_primary?: boolean }).is_primary ?? (idx === 0)),
     })),
     outOfStock: Boolean(variant.out_of_stock),
+    isFeatured: Boolean(variant.is_featured),
     ingredients: variant.ingredients ?? null,
     isReadyToMix: Boolean(variant.is_ready_to_mix),
     cookingRecipe: variant.cooking_recipe ?? null,
@@ -987,6 +989,11 @@ export const catalogRepository = {
     // Base facet where: before inStock and vegType filters are applied
     const baseFacetWhere: Prisma.ProductVariantWhereInput = { ...where };
 
+    // Featured filter
+    if (params.isFeatured !== undefined) {
+      where.is_featured = params.isFeatured;
+    }
+
     // In Stock / Out of Stock filter
     if (params.inStock !== undefined) {
       where.out_of_stock = !params.inStock;
@@ -1025,6 +1032,7 @@ export const catalogRepository = {
       vegCount,
       nonVegCount,
       veganCount,
+      featuredCount,
     ] = await Promise.all([
       db.productVariant.findMany({
         where,
@@ -1057,6 +1065,7 @@ export const catalogRepository = {
       db.productVariant.count({ where: { ...baseFacetWhere, veg_type: { in: ["veg", "na"] } } }),
       db.productVariant.count({ where: { ...baseFacetWhere, veg_type: "nonveg" } }),
       db.productVariant.count({ where: { ...baseFacetWhere, veg_type: "vegan" } }),
+      db.productVariant.count({ where: { ...baseFacetWhere, is_featured: true } }),
     ]);
 
     let data: CustomerVariantListItemDto[] = variants.map((v) =>
@@ -1088,6 +1097,7 @@ export const catalogRepository = {
           vegCount,
           nonVegCount,
           veganCount,
+          featuredCount,
         },
       },
     };

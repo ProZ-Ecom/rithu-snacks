@@ -2,6 +2,7 @@
 import {
   HeroSlider,
   CategorySection,
+  FeaturedSection,
   ProductSection,
   Banner,
   Pledge,
@@ -18,6 +19,7 @@ export default function HomePage() {
       <OfferPopup />
       <HeroSlider />
       <CategorySection />
+      <FeaturedSection />
       <ProductSection />
       <Banner />
       <OfferReels />

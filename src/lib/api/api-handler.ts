@@ -221,7 +221,8 @@ export function createApiHandler(
     } catch (error: any) {
       try {
         const fs = await import("fs");
-        fs.writeFileSync("d:/Projects/Rithu snacks/rithu-snacks/handler_error.log", String(error?.stack || error?.message || error));
+        const path = await import("path");
+        fs.writeFileSync(path.join(process.cwd(), "handler_error.log"), String(error?.stack || error?.message || error));
       } catch {}
 
       if (error instanceof ApiError) {
@@ -241,7 +242,8 @@ export function createApiHandler(
       }
 
       console.error(`Unhandled API Error [${method}]:`, error);
-      return apiError("Something went wrong", 500);
+      const isDev = process.env.NODE_ENV !== "production";
+      return apiError(isDev ? (error?.message || "Something went wrong") : "Something went wrong", 500);
     }
   };
 }

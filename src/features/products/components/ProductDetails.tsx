@@ -26,6 +26,7 @@ import { useAddToCart } from "@/features/cart/hooks/use-cart";
 import { useWishlist, useAddToWishlist, useRemoveFromWishlist } from "@/features/wishlist/hooks/use-wishlist";
 import { usePublicVariantReviews } from "@/features/reviews/hooks/use-public-reviews";
 import { ProductReviewsSection } from "@/features/reviews/components/ProductReviewsSection";
+import { ProductFeaturedRecommendations } from "./ProductFeaturedRecommendations";
 import type { CustomerProductDetailDto, CustomerVariantListItemDto } from "../types";
 import { sanitizeRichText } from "@/lib/sanitize-html";
 
@@ -649,6 +650,9 @@ function ProductDetails({ product }: ProductDetailsProps) {
         selectedUnitPriceId={selectedUnitPrice?.id}
         packSizes={unitPrices}
       />
+
+      {/* Featured Recommendations / You Might Also Love */}
+      <ProductFeaturedRecommendations currentProductId={product.id} />
     </div>
   );
 }

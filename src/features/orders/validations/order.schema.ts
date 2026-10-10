@@ -25,6 +25,7 @@ export const customerCreateOrderSchema = z
     shippingAddressId: z.string().uuid("Invalid shippingAddressId UUID format"),
     billingAddressId: z.string().uuid("Invalid billingAddressId UUID format").optional(),
     deliveryMethod: z.string().optional().default("standard"),
+    couponCode: z.string().trim().max(50).optional(),
     notes: z.string().max(500, "Notes cannot exceed 500 characters").optional(),
     paymentMethod: z.enum(["CARD", "COD", "UPI"]).default("CARD").optional(),
     paymentDetails: z.record(z.string(), z.any()).optional(),

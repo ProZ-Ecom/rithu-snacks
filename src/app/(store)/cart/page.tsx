@@ -156,17 +156,21 @@ export default function CartPage() {
   );
 
   const totalDiscount = Number(cart?.totalDiscount ?? cart?.totalSavings ?? 0);
+  const couponDiscount = Number(cart?.couponDiscount || cart?.coupon?.discountAmount || 0);
   const originalSubtotal = Number(cart?.originalSubtotal ?? (subtotal + totalDiscount));
 
   const freeDeliveryThreshold = 499;
-  const isFreeDelivery = subtotal >= freeDeliveryThreshold || subtotal === 0;
+  const payableItemsTotal = Number(cart?.total ?? Math.max(0, subtotal - couponDiscount));
+  const isFreeDelivery = payableItemsTotal >= freeDeliveryThreshold || payableItemsTotal === 0;
   const shippingCharge = isFreeDelivery ? 0 : 49;
-  const grandTotal = subtotal + shippingCharge;
+  const grandTotal = payableItemsTotal + shippingCharge;
 
   const summary = {
     subtotal,
     originalSubtotal,
     discount: totalDiscount,
+    couponDiscount,
+    coupon: cart?.coupon ?? null,
     tax: 0,
     shippingCharge,
     grandTotal,

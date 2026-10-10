@@ -13,6 +13,7 @@ import {
   SlidersHorizontal,
   Loader2,
   Check,
+  Sparkles,
 } from "lucide-react";
 import { formatPrice } from "@/lib/utils";
 import { customerCatalogApi } from "@/features/customers/api/customer-catalog.api";
@@ -50,6 +51,10 @@ export interface FilterSidebarProps {
   sortKey: string;
   onSortChange: (sortKey: string) => void;
 
+  // Curated / Featured Items
+  isFeaturedOnly?: boolean;
+  onFeaturedOnlyChange?: (featured: boolean) => void;
+
   // Availability / In Stock
   stockStatus: "all" | "in_stock" | "out_of_stock";
   onStockStatusChange: (status: "all" | "in_stock" | "out_of_stock") => void;
@@ -65,6 +70,7 @@ export interface FilterSidebarProps {
     vegCount?: number;
     nonVegCount?: number;
     veganCount?: number;
+    featuredCount?: number;
   };
 
   // Price Range Slider
@@ -110,6 +116,8 @@ export function FilterSidebar({
   onSearchChange,
   sortKey,
   onSortChange,
+  isFeaturedOnly = false,
+  onFeaturedOnlyChange,
   stockStatus,
   onStockStatusChange,
   vegType,
@@ -606,7 +614,45 @@ export function FilterSidebar({
         />
       </div>
 
-      {/* 4. Availability Pills */}
+      {/* 4. Curated / Featured Items Toggle */}
+      {onFeaturedOnlyChange && (
+        <div className="flex flex-col gap-2">
+          <span className="text-[11px] font-extrabold uppercase tracking-wider text-[#7A6258]">
+            Curated Picks
+          </span>
+          <button
+            type="button"
+            onClick={() => onFeaturedOnlyChange(!isFeaturedOnly)}
+            className={`w-full px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all select-none flex items-center justify-between border cursor-pointer ${
+              isFeaturedOnly
+                ? "bg-[var(--primary-100)] border-[var(--primary-500)] text-[var(--secondary-shade-800)] shadow-xs"
+                : "bg-white border-[#DCC7B7] text-[#2D1810] hover:bg-[#FAF6F0]"
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <Sparkles
+                className={`w-4 h-4 ${
+                  isFeaturedOnly ? "text-[var(--primary-600)] fill-[var(--primary-500)]" : "text-[var(--primary-600)]"
+                }`}
+              />
+              <span className="font-bold">Featured Snacks</span>
+            </div>
+            {facets?.featuredCount !== undefined && (
+              <span
+                className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
+                  isFeaturedOnly
+                    ? "bg-[var(--primary-500)] text-[var(--secondary-shade-800)]"
+                    : "bg-[#F5ECE1] text-[#7A6258]"
+                }`}
+              >
+                {facets.featuredCount}
+              </span>
+            )}
+          </button>
+        </div>
+      )}
+
+      {/* 5. Availability Pills */}
       <div className="flex flex-col gap-2">
         <span className="text-[11px] font-extrabold uppercase tracking-wider text-[#7A6258]">
           Availability

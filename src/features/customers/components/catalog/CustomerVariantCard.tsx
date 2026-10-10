@@ -122,6 +122,7 @@ export function CustomerVariantCard({ variant }: CustomerVariantCardProps) {
       onWishlistToggle={handleWishlistToggle}
       onAddToCart={handleAddToCart}
       isLoading={addToCart.isPending}
+      isFeatured={variant.isFeatured}
     />
   );
 }

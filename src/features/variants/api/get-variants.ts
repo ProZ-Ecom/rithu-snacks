@@ -44,6 +44,15 @@ export async function getCustomerVariants(
   if (params?.maxPrice !== undefined && params?.maxPrice !== null) {
     body.maxPrice = params.maxPrice;
   }
+  if (params?.isFeatured !== undefined) {
+    body.isFeatured = params.isFeatured;
+  }
+  if (params?.inStock !== undefined) {
+    body.inStock = params.inStock;
+  }
+  if (params?.vegType !== undefined) {
+    body.vegType = params.vegType;
+  }
 
   const response = await apiClient.post<CustomerVariantListItemDto[]>(
     "/api/customer/variants",

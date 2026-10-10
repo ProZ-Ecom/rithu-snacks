@@ -72,6 +72,7 @@ export interface CustomerVariantListItemDto {
   primaryImage: string | null;
   images?: CustomerVariantImageDto[];
   outOfStock?: boolean;
+  isFeatured: boolean;
   ingredients: string | null;
   isReadyToMix: boolean;
   cookingRecipe: string | null;

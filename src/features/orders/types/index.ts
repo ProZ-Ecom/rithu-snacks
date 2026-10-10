@@ -109,6 +109,8 @@ export interface OrderDetailResponse extends OrderListItemResponse {
   shippingAddress: OrderAddressResponse | null;
   billingAddress: OrderAddressResponse | null;
   statusHistory: OrderStatusHistoryResponse[];
+  couponCode?: string | null;
+  couponDiscount?: number | null;
 }
 
 export interface OrderStatusTransitionResponse {
@@ -169,6 +171,8 @@ export interface OrderDetail extends OrderListItem {
   discountAmount: number;
   shippingCharge: number;
   notes?: string | null;
+  couponCode?: string | null;
+  couponDiscount?: number | null;
 }
 
 export interface GetOrdersResult {

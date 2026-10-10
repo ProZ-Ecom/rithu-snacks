@@ -90,3 +90,27 @@ export function useClearCartMutation() {
     },
   });
 }
+
+export function useApplyCouponMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (code: string) => customerCartApi.applyCoupon(code),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: CUSTOMER_CART_QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: ["cart"] });
+    },
+  });
+}
+
+export function useRemoveCouponMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: () => customerCartApi.removeCoupon(),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: CUSTOMER_CART_QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: ["cart"] });
+    },
+  });
+}

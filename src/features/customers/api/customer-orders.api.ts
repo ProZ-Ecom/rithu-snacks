@@ -22,6 +22,7 @@ export interface CreateCustomerOrderPayload {
   notes?: string;
   paymentMethod?: "CARD" | "COD" | "UPI";
   paymentDetails?: Record<string, any>;
+  couponCode?: string;
 }
 
 export interface CancelCustomerOrderPayload {

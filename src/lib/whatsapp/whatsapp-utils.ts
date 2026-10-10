@@ -2,16 +2,144 @@
  * WhatsApp Utility Functions & Message Templates
  */
 
-export function formatToWhatsAppJid(phone: string): string {
-  // Strip all non-digit characters
-  let cleaned = phone.replace(/\D/g, "");
+export interface PhoneValidationResult {
+  isValid: boolean;
+  formattedJid: string | null;
+  displayFormatted: string | null;
+  errorMessage: string | null;
+}
 
-  // If starts with 0 (e.g. 09876543210), strip the leading 0
+/**
+ * Validates whether an input string is a valid WhatsApp phone number.
+ * Supports:
+ * - 10-digit Indian numbers (starting with 6, 7, 8, or 9, e.g. "9876543210")
+ * - Numbers with leading zero (e.g. "09876543210")
+ * - Numbers with +91 or 91 country code (e.g. "+91 98765 43210", "+919876543210")
+ * - Standard international phone numbers (10 to 15 digits total as per E.164)
+ */
+export function validateWhatsAppPhone(phone: string): PhoneValidationResult {
+  if (!phone || typeof phone !== "string") {
+    return {
+      isValid: false,
+      formattedJid: null,
+      displayFormatted: null,
+      errorMessage: "Phone number is required",
+    };
+  }
+
+  const trimmed = phone.trim();
+  if (!trimmed) {
+    return {
+      isValid: false,
+      formattedJid: null,
+      displayFormatted: null,
+      errorMessage: "Phone number cannot be empty",
+    };
+  }
+
+  // Check if input contains invalid non-phone characters (letters, special symbols)
+  if (/[^0-9+\s\-()]/i.test(trimmed)) {
+    return {
+      isValid: false,
+      formattedJid: null,
+      displayFormatted: null,
+      errorMessage: "Phone number cannot contain letters or special symbols",
+    };
+  }
+
+  // Extract digits only
+  let digits = trimmed.replace(/\D/g, "");
+
+  if (!digits) {
+    return {
+      isValid: false,
+      formattedJid: null,
+      displayFormatted: null,
+      errorMessage: "Please enter valid numeric digits",
+    };
+  }
+
+  // If starts with 0 and followed by 10 digits (e.g. 09876543210)
+  if (digits.startsWith("0") && digits.length === 11) {
+    digits = digits.substring(1);
+  }
+
+  // Case 1: 10-digit Indian mobile number
+  if (digits.length === 10) {
+    if (!/^[6-9]\d{9}$/.test(digits)) {
+      return {
+        isValid: false,
+        formattedJid: null,
+        displayFormatted: null,
+        errorMessage: "10-digit Indian mobile number must start with 6, 7, 8, or 9",
+      };
+    }
+    const fullDigits = "91" + digits;
+    return {
+      isValid: true,
+      formattedJid: `${fullDigits}@s.whatsapp.net`,
+      displayFormatted: `+91 ${digits.slice(0, 5)} ${digits.slice(5)}`,
+      errorMessage: null,
+    };
+  }
+
+  // Case 2: 12-digit Indian number with 91 country code (919876543210)
+  if (digits.length === 12 && digits.startsWith("91")) {
+    const mobilePart = digits.slice(2);
+    if (!/^[6-9]\d{9}$/.test(mobilePart)) {
+      return {
+        isValid: false,
+        formattedJid: null,
+        displayFormatted: null,
+        errorMessage: "Indian mobile number after +91 must start with 6, 7, 8, or 9",
+      };
+    }
+    return {
+      isValid: true,
+      formattedJid: `${digits}@s.whatsapp.net`,
+      displayFormatted: `+91 ${mobilePart.slice(0, 5)} ${mobilePart.slice(5)}`,
+      errorMessage: null,
+    };
+  }
+
+  // Case 3: International numbers (10 to 15 digits total as per ITU E.164)
+  if (digits.length >= 10 && digits.length <= 15) {
+    return {
+      isValid: true,
+      formattedJid: `${digits}@s.whatsapp.net`,
+      displayFormatted: `+${digits}`,
+      errorMessage: null,
+    };
+  }
+
+  if (digits.length < 10) {
+    return {
+      isValid: false,
+      formattedJid: null,
+      displayFormatted: null,
+      errorMessage: `Phone number is too short (${digits.length}/10 digits minimum)`,
+    };
+  }
+
+  return {
+    isValid: false,
+    formattedJid: null,
+    displayFormatted: null,
+    errorMessage: "Phone number is too long (cannot exceed 15 digits)",
+  };
+}
+
+export function formatToWhatsAppJid(phone: string): string {
+  const result = validateWhatsAppPhone(phone);
+  if (result.isValid && result.formattedJid) {
+    return result.formattedJid;
+  }
+
+  // Fallback cleanup
+  let cleaned = phone.replace(/\D/g, "");
   if (cleaned.startsWith("0")) {
     cleaned = cleaned.substring(1);
   }
-
-  // If 10 digits, assume Indian mobile number (+91)
   if (cleaned.length === 10) {
     cleaned = "91" + cleaned;
   }

@@ -6,6 +6,8 @@ export interface CouponListItem {
   minOrderAmount: number | null;
   maxDiscount: number | null;
   usageLimit: number | null;
+  usageLimitPerUser: number | null;
+  isFirstOrderOnly: boolean;
   usedCount: number;
   isActive: boolean;
   startsAt: Date | null;
@@ -30,11 +32,26 @@ export interface CreateCouponInput {
   type: "PERCENTAGE" | "FIXED";
   value: number;
   minOrderAmount?: number;
-  maxDiscount?: number;
-  usageLimit?: number;
+  maxDiscount?: number | null;
+  usageLimit?: number | null;
+  usageLimitPerUser?: number | null;
+  isFirstOrderOnly?: boolean;
   isActive?: boolean;
   startsAt?: Date;
   expiresAt?: Date;
 }
 
 export interface UpdateCouponInput extends Partial<CreateCouponInput> {}
+
+export interface CouponCalculationResult {
+  isValid: boolean;
+  couponId: number;
+  code: string;
+  type: "flat" | "percentage";
+  value: number;
+  discountAmount: number;
+  minOrderAmount: number;
+  maxDiscount: number | null;
+  isFirstOrderOnly: boolean;
+  message?: string;
+}

@@ -2,8 +2,10 @@
 
 import * as React from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
+import { ChevronRight, Sparkles } from "lucide-react";
 import { SnackCard } from "./cards/SnackCard";
 import { ProductCardSkeleton } from "./cards/ProductCardSkeleton";
 import { SectionHeading } from "./heading/SectionHeading";
@@ -19,21 +21,21 @@ import {
 import { mapVariantToStorefrontProduct } from "@/lib/storefront";
 import { ICONS, type StorefrontProduct } from "@/constants/storefront";
 
-export interface ProductSectionProps {
-  selectedCategoryId?: string | null;
+export interface FeaturedSectionProps {
+  className?: string;
+  limit?: number;
 }
 
-export function ProductSection({ selectedCategoryId }: ProductSectionProps) {
+export function FeaturedSection({ className = "", limit = 8 }: FeaturedSectionProps) {
   const router = useRouter();
   const { data: session } = useSession();
-  const [showAll, setShowAll] = React.useState(false);
   const [toastMessage, setToastMessage] = React.useState<string | null>(null);
 
-  // Fetch variants from the real Customer Catalog API
+  // Fetch only items where isFeatured === true from the Customer Catalog API
   const { data: response, isLoading, isError } = useCustomerVariants({
-    categoryIds: selectedCategoryId ? [selectedCategoryId] : undefined,
+    isFeatured: true,
     page: 1,
-    pageSize: 20,
+    pageSize: limit,
     sortBy: "createdAt",
     sortOrder: "desc",
   });
@@ -80,10 +82,13 @@ export function ProductSection({ selectedCategoryId }: ProductSectionProps) {
     }
   };
 
-  const visibleProducts = showAll ? products : products.slice(0, 4);
+  // Gracefully don't render empty section when there are no featured items
+  if (!isLoading && (isError || products.length === 0)) {
+    return null;
+  }
 
   return (
-    <Section className="relative">
+    <Section className={`relative bg-[var(--cream-50)]/60 border-y border-[var(--cream-border)] py-8 sm:py-12 ${className}`}>
       {/* Toast alert feedback */}
       {toastMessage && (
         <div className="fixed top-24 right-4 z-50 rounded-xl bg-[var(--brown-800)] text-white px-5 py-3 shadow-xl text-sm font-medium animate-in fade-in-0 duration-200">
@@ -91,7 +96,17 @@ export function ProductSection({ selectedCategoryId }: ProductSectionProps) {
         </div>
       )}
 
-      <SectionHeading title="Better snacking starts here!" />
+      {/* Section Header */}
+      <div className="text-center mb-6 sm:mb-8">
+        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[var(--primary-100)] text-[var(--secondary-shade-800)] text-xs font-extrabold uppercase tracking-widest mb-3">
+          <Sparkles className="w-3.5 h-3.5 fill-[var(--primary-600)] text-[var(--primary-600)]" />
+          <span>Chef&apos;s Specials</span>
+        </div>
+        <SectionHeading title="Featured Delights" className="mb-2 sm:mb-3" />
+        <p className="text-xs sm:text-sm text-[var(--neutral-600)] max-w-xl mx-auto px-4">
+          Handpicked signature recipes, crafted with authentic heritage traditions and pure love.
+        </p>
+      </div>
 
       {/* Products Grid */}
       <div
@@ -106,15 +121,15 @@ export function ProductSection({ selectedCategoryId }: ProductSectionProps) {
       >
         {isLoading &&
           Array.from({ length: 4 }).map((_, index) => (
-            <ProductCardSkeleton key={`skeleton-${index}`} />
+            <ProductCardSkeleton key={`featured-skeleton-${index}`} />
           ))}
 
         {!isLoading &&
-          visibleProducts.map((product) => (
+          products.map((product) => (
             <SnackCard
-              key={product.id}
+              key={`featured-${product.id}`}
               product={product}
-              isFeatured={product.isFeatured}
+              isFeatured={true}
               isWishlisted={product.unitPrices.some((u) => wishlistedIds.has(u.id))}
               onWishlistToggle={(unitPriceId) =>
                 handleWishlistToggle(product, unitPriceId || product.unitPrices[0]?.id)
@@ -127,40 +142,20 @@ export function ProductSection({ selectedCategoryId }: ProductSectionProps) {
           ))}
       </div>
 
-      {/* Empty State */}
-      {!isLoading && !isError && products.length === 0 && (
-        <div className="py-16 text-center text-sm text-[var(--color-neutral-500)]">
-          <p className="text-base font-medium text-[var(--brown-800)]">
-            No snacks found in this category.
-          </p>
-          <p className="mt-1 text-xs text-gray-400">
-            Please explore our other delicious snack categories.
-          </p>
-        </div>
-      )}
-
-      {/* View All Button */}
-      {products.length > 4 && (
-        <div className="flex justify-center mt-12">
+      {/* Explore All Link CTA */}
+      <div className="flex justify-center mt-8 sm:mt-12">
+        <Link href="/products?featured=true">
           <PrimaryButton
             variant="brown"
-            onClick={() => setShowAll(!showAll)}
-            className="flex items-center justify-center gap-2 px-8 py-3 rounded-full text-sm cursor-pointer hover:scale-105 duration-300 transition-all"
+            className="flex items-center justify-center gap-2 px-8 py-3 rounded-full text-sm font-bold cursor-pointer hover:scale-105 duration-300 transition-all shadow-xs"
           >
-            <Image
-              src={ICONS.view_all}
-              alt="view_all"
-              width={16}
-              height={16}
-            />
-            <span className="header-font">
-              {showAll ? "Show Less" : "View All"}
-            </span>
+            <span>Explore All Featured Delights</span>
+            <ChevronRight className="w-4 h-4 text-[var(--primary-base)]" />
           </PrimaryButton>
-        </div>
-      )}
+        </Link>
+      </div>
     </Section>
   );
 }
 
-export default ProductSection;
+export default FeaturedSection;

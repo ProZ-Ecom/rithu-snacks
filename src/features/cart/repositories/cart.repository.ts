@@ -55,6 +55,7 @@ export const cartItemInclude = Prisma.validator<Prisma.CartItemInclude>()({
 });
 
 export const cartInclude = Prisma.validator<Prisma.CartInclude>()({
+  coupons: true,
   items: {
     where: {
       is_active: true,
@@ -428,5 +429,21 @@ export const cartRepository = {
       count: result._count.id ?? 0,
       totalQuantity: result._sum.quantity ?? 0,
     };
+  },
+
+  async applyCouponToCart(cartId: bigint, couponId: bigint) {
+    return db.cart.update({
+      where: { id: cartId },
+      data: { coupon_id: couponId, updatedAt: new Date() },
+      include: cartInclude,
+    });
+  },
+
+  async removeCouponFromCart(cartId: bigint) {
+    return db.cart.update({
+      where: { id: cartId },
+      data: { coupon_id: null, updatedAt: new Date() },
+      include: cartInclude,
+    });
   },
 };
