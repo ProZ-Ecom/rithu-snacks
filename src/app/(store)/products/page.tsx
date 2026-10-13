@@ -69,6 +69,9 @@ function ShopAllContent() {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [sortKey, setSortKey] = useState("createdAt_desc");
+  const [isFeaturedOnly, setIsFeaturedOnly] = useState(
+    searchParams.get("featured") === "true"
+  );
   const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>([]);
   const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
   const [stockStatus, setStockStatus] = useState<"all" | "in_stock" | "out_of_stock">("all");
@@ -77,7 +80,15 @@ function ShopAllContent() {
   const [maxPrice, setMaxPrice] = useState(1000);
   const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
 
-  // Sync URL product and category filters
+  // Sync URL product, category, and featured filters
+  useEffect(() => {
+    const featuredParam = searchParams.get("featured");
+    if (featuredParam === "true") {
+      setIsFeaturedOnly(true);
+      setPage(1);
+    }
+  }, [searchParams]);
+
   useEffect(() => {
     if (urlProductId) {
       setSelectedProductIds([urlProductId]);
@@ -142,6 +153,7 @@ function ShopAllContent() {
     minPrice: minPrice > 0 ? minPrice : undefined,
     maxPrice: maxPrice < 1000 ? maxPrice : undefined,
     inStock: inStockParam,
+    isFeatured: isFeaturedOnly ? true : undefined,
     vegType: vegTypeParam,
     sortBy: activeSort.sortBy,
     sortOrder: activeSort.sortOrder,
@@ -232,6 +244,7 @@ function ShopAllContent() {
 
   const hasActiveFilters =
     Boolean(search.trim()) ||
+    isFeaturedOnly ||
     selectedCategoryIds.length > 0 ||
     selectedProductIds.length > 0 ||
     stockStatus !== "all" ||
@@ -245,6 +258,7 @@ function ShopAllContent() {
     if (!hasActiveFilters) return;
     setSearch("");
     setSortKey("createdAt_desc");
+    setIsFeaturedOnly(false);
     setSelectedCategoryIds([]);
     setSelectedProductIds([]);
     setStockStatus("all");
@@ -257,6 +271,7 @@ function ShopAllContent() {
 
   const activeFilterCount = [
     Boolean(search.trim()),
+    isFeaturedOnly,
     selectedCategoryIds.length > 0,
     selectedProductIds.length > 0,
     stockStatus !== "all",
@@ -317,20 +332,45 @@ function ShopAllContent() {
       <div className="w-full bg-white">
         <div className="w-full max-w-7xl 2xl:max-w-[1600px] 3xl:max-w-[1800px] mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-10 bg-white">
           {/* Mobile Filter Toggle Button */}
-          <div className="lg:hidden mb-6 flex items-center justify-between gap-3 bg-white border border-[#E8D9CD] rounded-xl p-3 shadow-xs">
-            <button
-              type="button"
-              onClick={() => setIsMobileFilterOpen(true)}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[#7A2224] text-white font-bold text-xs shadow-xs cursor-pointer"
-            >
-              <SlidersHorizontal className="w-3.5 h-3.5" />
-              Filters
-              {activeFilterCount > 0 && (
-                <span className="w-4.5 h-4.5 rounded-full bg-[#F8BE15] text-[#2D1810] font-black text-[10px] flex items-center justify-center">
-                  {activeFilterCount}
-                </span>
-              )}
-            </button>
+          <div className="lg:hidden mb-6 flex flex-wrap items-center justify-between gap-3 bg-white border border-[#E8D9CD] rounded-xl p-3 shadow-xs">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setIsMobileFilterOpen(true)}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[#7A2224] text-white font-bold text-xs shadow-xs cursor-pointer"
+              >
+                <SlidersHorizontal className="w-3.5 h-3.5" />
+                Filters
+                {activeFilterCount > 0 && (
+                  <span className="w-4.5 h-4.5 rounded-full bg-[#F8BE15] text-[#2D1810] font-black text-[10px] flex items-center justify-center">
+                    {activeFilterCount}
+                  </span>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setIsFeaturedOnly(!isFeaturedOnly);
+                  setPage(1);
+                  scrollToCatalogTop();
+                }}
+                className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  isFeaturedOnly
+                    ? "bg-gradient-to-r from-[var(--primary-500)] to-[var(--primary-600)] text-[var(--secondary-shade-800)] shadow-xs"
+                    : "bg-[#FAF6F0] border border-[#DCC7B7] text-[#2D1810]"
+                }`}
+              >
+                <Sparkles
+                  className={`w-3.5 h-3.5 ${
+                    isFeaturedOnly
+                      ? "text-[var(--secondary-shade-800)] fill-[var(--secondary-shade-800)]"
+                      : "text-[var(--primary-600)]"
+                  }`}
+                />
+                <span>Featured</span>
+              </button>
+            </div>
 
             <span className="text-xs text-[#7A6258] font-medium">
               Showing <strong className="text-[#2D1810]">{meta?.total ?? displayedVariants.length}</strong> snacks
@@ -356,6 +396,12 @@ function ShopAllContent() {
               sortKey={sortKey}
               onSortChange={(val) => {
                 setSortKey(val);
+                setPage(1);
+                scrollToCatalogTop();
+              }}
+              isFeaturedOnly={isFeaturedOnly}
+              onFeaturedOnlyChange={(val) => {
+                setIsFeaturedOnly(val);
                 setPage(1);
                 scrollToCatalogTop();
               }}
@@ -413,15 +459,43 @@ function ShopAllContent() {
                   )}
                 </p>
 
-                {hasActiveFilters && (
+                <div className="flex items-center gap-3">
                   <button
                     type="button"
-                    onClick={handleResetFilters}
-                    className="text-xs font-bold text-[#7A2224] hover:underline cursor-pointer transition-colors"
+                    onClick={() => {
+                      setIsFeaturedOnly(!isFeaturedOnly);
+                      setPage(1);
+                      scrollToCatalogTop();
+                    }}
+                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                      isFeaturedOnly
+                        ? "bg-gradient-to-r from-[var(--primary-500)] to-[var(--primary-600)] text-[var(--secondary-shade-800)] shadow-xs"
+                        : "bg-white border border-[#DCC7B7] text-[#2D1810] hover:bg-[#FAF6F0]"
+                    }`}
                   >
-                    Reset All Filters
+                    <Sparkles
+                      className={`w-3.5 h-3.5 ${
+                        isFeaturedOnly
+                          ? "text-[var(--secondary-shade-800)] fill-[var(--secondary-shade-800)]"
+                          : "text-[var(--primary-600)]"
+                      }`}
+                    />
+                    <span>Featured Picks</span>
+                    {meta?.facets?.featuredCount !== undefined && (
+                      <span className="text-[10px] opacity-80">({meta.facets.featuredCount})</span>
+                    )}
                   </button>
-                )}
+
+                  {hasActiveFilters && (
+                    <button
+                      type="button"
+                      onClick={handleResetFilters}
+                      className="text-xs font-bold text-[#7A2224] hover:underline cursor-pointer transition-colors"
+                    >
+                      Reset All Filters
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* Error State */}

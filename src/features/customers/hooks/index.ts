@@ -43,6 +43,8 @@ export {
   useUpdateCartQuantityMutation,
   useRemoveCartItemMutation,
   useClearCartMutation,
+  useApplyCouponMutation,
+  useRemoveCouponMutation,
   CUSTOMER_CART_QUERY_KEY,
 } from "./use-customer-cart";
 export {

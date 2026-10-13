@@ -857,6 +857,7 @@ model Coupon {
   valid_from                      DateTime?      @db.Timestamp(0)
   valid_to                        DateTime?      @db.Timestamp(0)
   isActive                        Boolean        @default(true) @map("is_active")
+  is_first_order_only             Boolean        @default(false) @map("is_first_order_only")
   createdAt                       DateTime       @default(now()) @map("created_at") @db.Timestamp(0)
   updatedAt                       DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamp(0)
   created_by                      BigInt?        @db.UnsignedBigInt

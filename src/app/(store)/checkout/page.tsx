@@ -44,6 +44,7 @@ import { useCheckout } from "@/features/checkout/checkout-context";
 import type { CustomerAddressResponse } from "@/features/customers/types/customer-address.types";
 import { usePincodeLookup } from "@/lib/pincode";
 import { loadRazorpayScript } from "@/features/customers/utils/razorpay-loader";
+import { CouponInput } from "@/features/cart/components/CouponInput";
 
 
 function CheckoutSkeleton() {
@@ -296,10 +297,12 @@ export default function CheckoutPage() {
   const items = cart?.items || [];
   const subtotal = Number(cart?.subtotal ?? cart?.total ?? 0);
   const totalDiscount = Number(cart?.totalDiscount ?? cart?.totalSavings ?? 0);
-  const isFreeDelivery = subtotal >= 499;
+  const couponDiscount = Number(cart?.couponDiscount || cart?.coupon?.discountAmount || 0);
+  const payableSubtotal = Number(cart?.total ?? Math.max(0, subtotal - couponDiscount));
+  const isFreeDelivery = payableSubtotal >= 499;
   const shippingCharge =
     deliveryMethod === "express" ? 99 : isFreeDelivery ? 0 : 49;
-  const grandTotal = subtotal + shippingCharge;
+  const grandTotal = payableSubtotal + shippingCharge;
 
   // Authentication gate
   if (authStatus === "loading" || (cartLoading && !cart) || addressesLoading) {
@@ -566,6 +569,7 @@ export default function CheckoutPage() {
         const orderRes = await createOrderMutation.mutateAsync({
           shippingAddressId: effectiveAddressId,
           deliveryMethod: deliveryMethod,
+          couponCode: cart?.coupon?.code || undefined,
           paymentMethod: "COD",
           notes: orderNotes.trim() || undefined,
           paymentDetails: {
@@ -1223,8 +1227,16 @@ export default function CheckoutPage() {
                 ))}
               </div>
 
+              {/* Promo Coupon Section */}
+              <div className="border-t border-theme-border-subtle pt-3">
+                <CouponInput
+                  appliedCoupon={cart?.coupon}
+                  couponDiscount={couponDiscount}
+                />
+              </div>
+
               {/* Price Calculation Breakdown */}
-              <div className="border-t border-theme-border-subtle pt-4 space-y-2.5 text-xs">
+              <div className="border-t border-theme-border-subtle pt-3 space-y-2.5 text-xs">
                 <div className="flex justify-between text-theme-text-subtle">
                   <span>Items Subtotal</span>
                   <span className="font-semibold text-theme-text-primary">
@@ -1240,6 +1252,18 @@ export default function CheckoutPage() {
                     </span>
                     <span className="font-semibold">
                       -{formatPrice(totalDiscount)}
+                    </span>
+                  </div>
+                )}
+
+                {couponDiscount > 0 && (
+                  <div className="flex justify-between items-center text-xs font-semibold text-emerald-600 bg-emerald-50 px-2.5 py-1.5 rounded-lg border border-emerald-200">
+                    <span className="flex items-center gap-1">
+                      <Sparkles className="h-3 w-3 text-emerald-500 shrink-0" />
+                      <span>Coupon Discount ({cart?.coupon?.code})</span>
+                    </span>
+                    <span className="font-semibold">
+                      -{formatPrice(couponDiscount)}
                     </span>
                   </div>
                 )}

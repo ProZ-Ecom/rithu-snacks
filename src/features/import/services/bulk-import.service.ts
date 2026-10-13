@@ -16,10 +16,15 @@ export interface ImportRowResult {
 
 export interface ImportPreviewItem {
   categoryName: string;
+  categoryCode?: string;
   productName: string;
+  productCode?: string;
   sku: string;
+  brand?: string;
   variants: {
     variantName: string;
+    variantCode?: string;
+    vegType?: string;
     unit: string;
     unitValue: number;
     variantSku: string;
@@ -44,72 +49,156 @@ export interface ImportResult {
 interface RawCategoryRow {
   category_name?: string;
   category?: string;
+  category_code?: string;
+  category_slug?: string;
+  slug?: string;
   parent_category?: string;
   description?: string;
+  category_description?: string;
+  image?: string;
+  category_image?: string;
+  icon?: string;
+  category_icon?: string;
   sort_order?: number | string;
+  category_sort_order?: number | string;
 }
 
 interface RawProductRow {
   category_name?: string;
   category?: string;
+  category_code?: string;
   product_name?: string;
   name?: string;
-  sku?: string;
+  product_code?: string;
+  product_slug?: string;
+  slug?: string;
   product_sku?: string;
+  sku?: string;
+  brand?: string;
+  brand_name?: string;
+  hsn_code?: string;
+  hsn?: string;
+  product_description?: string;
+  description?: string;
+  product_image?: string;
+  image_url?: string;
   base_price?: number | string;
   price?: number | string;
   sale_price?: number | string;
-  description?: string;
-  product_description?: string;
-  brand?: string;
-  hsn_code?: string;
 }
 
 interface RawVariantRow {
   product_sku?: string;
   sku?: string;
+  product_code?: string;
+  item_name?: string;
   variant_name?: string;
   name?: string;
+  item_code?: string;
+  variant_code?: string;
+  variant_slug?: string;
+  slug?: string;
+  veg_type?: string;
+  dietary_type?: string;
+  shelf_life?: string;
+  best_before?: string;
+  is_featured?: string | boolean | number;
+  featured?: string | boolean | number;
+  is_ready_to_mix?: string | boolean | number;
+  ready_to_mix?: string | boolean | number;
+  cooking_recipe?: string;
+  recipe?: string;
+  short_description?: string;
+  item_description?: string;
+  variant_description?: string;
+  description?: string;
+  ingredients?: string;
+  item_image?: string;
+  variant_image?: string;
+  out_of_stock?: string | boolean | number;
   unit?: string;
+  unit_code?: string;
   unit_value?: number | string;
+  pack_size?: number | string;
   variant_sku?: string;
+  pack_sku?: string;
   price?: number | string;
   base_price?: number | string;
   stock_qty?: number | string;
   stock?: number | string;
   reorder_level?: number | string;
   is_default?: string | boolean | number;
-  veg_type?: string;
-  shelf_life?: string;
-  short_description?: string;
+  is_active?: string | boolean | number;
 }
 
 interface RawUnifiedRow {
+  // Category fields
   category?: string;
   category_name?: string;
+  category_code?: string;
+  category_slug?: string;
+  category_description?: string;
+  category_image?: string;
+  category_icon?: string;
+  icon?: string;
+  category_sort_order?: number | string;
+  sort_order?: number | string;
+
+  // Product fields
   product_name?: string;
   name?: string;
+  product_code?: string;
+  product_slug?: string;
   product_sku?: string;
+  sku?: string;
+  brand?: string;
+  brand_name?: string;
+  hsn_code?: string;
+  hsn?: string;
   product_description?: string;
   description?: string;
-  brand?: string;
-  hsn_code?: string;
-  variant_name?: string;
-  item_name?: string;
-  unit?: string;
-  unit_value?: number | string;
-  variant_sku?: string;
-  sku?: string;
+  product_image?: string;
+  image_url?: string;
   price?: number | string;
   base_price?: number | string;
   sale_price?: number | string;
+
+  // Item / Variant fields
+  item_name?: string;
+  variant_name?: string;
+  item_code?: string;
+  variant_code?: string;
+  variant_slug?: string;
+  veg_type?: string;
+  dietary_type?: string;
+  shelf_life?: string;
+  best_before?: string;
+  is_featured?: string | boolean | number;
+  featured?: string | boolean | number;
+  is_ready_to_mix?: string | boolean | number;
+  ready_to_mix?: string | boolean | number;
+  cooking_recipe?: string;
+  recipe?: string;
+  short_description?: string;
+  item_description?: string;
+  variant_description?: string;
+  ingredients?: string;
+  item_image?: string;
+  variant_image?: string;
+  out_of_stock?: string | boolean | number;
+
+  // Units & Pricing fields
+  unit?: string;
+  unit_code?: string;
+  unit_value?: number | string;
+  pack_size?: number | string;
+  variant_sku?: string;
+  pack_sku?: string;
   stock_qty?: number | string;
   stock?: number | string;
   reorder_level?: number | string;
   is_default?: string | boolean | number;
-  veg_type?: string;
-  shelf_life?: string;
-  short_description?: string;
+  is_active?: string | boolean | number;
 }
 
 // ─── Helper Functions ────────────────────────────────────────────────────────
@@ -118,7 +207,8 @@ function safeStr(v: unknown): string {
   return v != null ? String(v).trim() : "";
 }
 
-function safeBool(v: unknown): boolean {
+function safeBool(v: unknown, defaultVal = false): boolean {
+  if (v == null || v === "") return defaultVal;
   if (typeof v === "boolean") return v;
   const s = safeStr(v).toUpperCase();
   return s === "YES" || s === "TRUE" || s === "1";
@@ -128,15 +218,45 @@ function isRowEmpty(row: Record<string, unknown>): boolean {
   return Object.values(row).every((val) => safeStr(val) === "");
 }
 
+/**
+ * Normalizes user input for dietary type to 'veg' | 'nonveg' | 'vegan' | 'na'.
+ * Accepts variants like 'vegetarian', 'non-veg', 'vegan', 'na', etc.
+ */
+function parseVegType(raw: string): "veg" | "nonveg" | "vegan" | "na" | null {
+  const clean = safeStr(raw).toLowerCase().replace(/[^a-z]/g, "");
+  if (!clean) return "veg";
+  if (clean === "veg" || clean === "vegetarian") return "veg";
+  if (clean === "nonveg" || clean === "nonvegetarian") return "nonveg";
+  if (clean === "vegan") return "vegan";
+  if (clean === "na" || clean === "notapplicable" || clean === "none") return "na";
+  return null;
+}
+
 function makeUniqueSlug(base: string, existing: Set<string>): string {
   let slug = slugify(base).slice(0, 160);
   if (!slug) slug = "item";
   let attempt = slug;
   let i = 2;
-  while (existing.has(attempt)) {
+  while (existing.has(attempt.toUpperCase())) {
     attempt = `${slug}-${i++}`;
   }
-  existing.add(attempt);
+  existing.add(attempt.toUpperCase());
+  return attempt;
+}
+
+function makeUniqueCode(base: string, existing: Set<string>, maxLen = 160): string {
+  let code = base
+    .toUpperCase()
+    .replace(/[^A-Z0-9_]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, maxLen);
+  if (!code) code = "CODE";
+  let attempt = code;
+  let i = 2;
+  while (existing.has(attempt.toUpperCase())) {
+    attempt = `${code}_${i++}`.slice(0, maxLen);
+  }
+  existing.add(attempt.toUpperCase());
   return attempt;
 }
 
@@ -181,11 +301,6 @@ export const bulkImportService = {
       return XLSX.utils.sheet_to_json<T>(sheet, { defval: "" });
     };
 
-    const isMultiSheet =
-      sheetNames.includes("Categories") &&
-      sheetNames.includes("Products") &&
-      sheetNames.includes("Variants");
-
     // ─── Pre-load Database Lookups ───
     const [
       existingCategories,
@@ -203,7 +318,7 @@ export const bulkImportService = {
       }),
       db.product.findMany({
         where: { deleted_at: null },
-        select: { id: true, sku: true, name: true },
+        select: { id: true, sku: true, name: true, slug: true },
       }),
       db.product.findMany({
         where: { deleted_at: null },
@@ -223,7 +338,7 @@ export const bulkImportService = {
       }),
       db.productBrand.findMany({
         where: { deleted_at: null, isActive: true },
-        select: { id: true, name: true },
+        select: { id: true, name: true, slug: true },
       }),
       db.product_hsn_codes.findMany({
         where: { is_active: true },
@@ -236,22 +351,25 @@ export const bulkImportService = {
     const usedCatSlugs = new Set<string>();
     for (const cat of existingCategories) {
       categoryMap.set(cat.name.toLowerCase(), cat.id);
-      usedCatSlugs.add(cat.slug);
+      categoryMap.set(cat.slug.toLowerCase(), cat.id);
+      usedCatSlugs.add(cat.slug.toUpperCase());
     }
 
-    // Products SKU lookup
+    // Products SKU & Slug lookup
     const existingDbProductSkus = new Set<string>();
+    const usedProdSlugs = new Set<string>();
     for (const p of existingProductSkus) {
       if (p.sku) existingDbProductSkus.add(p.sku.toUpperCase());
+      if (p.slug) usedProdSlugs.add(p.slug.toUpperCase());
+    }
+    for (const p of existingProductSlugs) {
+      if (p.slug) usedProdSlugs.add(p.slug.toUpperCase());
     }
 
-    // Product & Variant slugs lookup
-    const usedProdSlugs = new Set<string>();
-    for (const p of existingProductSlugs) usedProdSlugs.add(p.slug);
-
+    // Variant Slugs lookup
     const usedVarSlugs = new Set<string>();
     for (const v of existingVariantSlugs) {
-      if (v.slug) usedVarSlugs.add(v.slug);
+      if (v.slug) usedVarSlugs.add(v.slug.toUpperCase());
     }
 
     // Variant SKU lookup
@@ -274,9 +392,13 @@ export const bulkImportService = {
 
     // Brands lookup
     const brandMap = new Map<string, bigint>();
+    const usedBrandSlugs = new Set<string>();
     for (const b of dbBrands) {
       brandMap.set(b.name.toLowerCase(), b.id);
+      if (b.slug) usedBrandSlugs.add(b.slug.toUpperCase());
     }
+    const defaultBrandId = dbBrands.length > 0 ? dbBrands[0].id : undefined;
+    const defaultBrandName = dbBrands.length > 0 ? dbBrands[0].name : undefined;
 
     // HSN Codes lookup
     const hsnMap = new Map<string, bigint>();
@@ -295,6 +417,7 @@ export const bulkImportService = {
       slug: string;
       parentName?: string;
       description?: string;
+      icon?: string;
       sortOrder: number;
     };
 
@@ -306,13 +429,17 @@ export const bulkImportService = {
       basePrice: number;
       salePrice?: number;
       description?: string;
+      brandName?: string;
       brandId?: bigint;
+      hsnCode?: string;
       hsnCodeId?: bigint;
+      productImage?: string;
     };
 
     type ValidVariant = {
       productSku: string;
       variantName: string;
+      variantCode: string;
       unit: string;
       unitValue: number;
       variantSku: string;
@@ -320,9 +447,17 @@ export const bulkImportService = {
       stockQty: number;
       reorderLevel: number;
       isDefault: boolean;
-      vegType?: string;
+      vegType: "veg" | "nonveg" | "vegan" | "na";
       shelfLife?: string;
+      isFeatured: boolean;
+      isReadyToMix: boolean;
+      cookingRecipe?: string;
       shortDescription?: string;
+      description?: string;
+      ingredients?: string;
+      itemImage?: string;
+      outOfStock: boolean;
+      isActive: boolean;
     };
 
     const validCats: ValidCategory[] = [];
@@ -330,24 +465,35 @@ export const bulkImportService = {
     const validVars: ValidVariant[] = [];
 
     const sheetSeenProductSkus = new Set<string>();
+    const sheetSeenProductCodes = new Set<string>();
     const sheetSeenVariantSkus = new Set<string>();
+    const sheetSeenVariantCodes = new Set<string>();
     const sheetSeenCatNames = new Set<string>();
+    const sheetSeenCatCodes = new Set<string>();
     const sheetSeenVarUnitValue = new Set<string>();
 
     let totalRows = 0;
+
+    // Detect multi-sheet vs unified sheet
+    const catalogSheetName = sheetNames.find((n: string) => {
+      const lower = n.toLowerCase();
+      return (
+        (lower.includes("catalog") || lower.includes("product") || lower.includes("item")) &&
+        !lower.includes("instruction")
+      );
+    });
+
+    const isMultiSheet =
+      !catalogSheetName &&
+      sheetNames.includes("Categories") &&
+      sheetNames.includes("Products") &&
+      (sheetNames.includes("Variants") || sheetNames.includes("Items"));
 
     // ─────────────────────────────────────────────────────────────────────────
     // BRANCH A: UNIFIED SINGLE SHEET
     // ─────────────────────────────────────────────────────────────────────────
     if (!isMultiSheet) {
-      let dataSheetName = sheetNames.find((n: string) => {
-        const lower = n.toLowerCase();
-        return (
-          (lower.includes("catalog") || lower.includes("product") || lower.includes("item")) &&
-          !lower.includes("instruction")
-        );
-      });
-
+      let dataSheetName = catalogSheetName;
       if (!dataSheetName) {
         dataSheetName =
           sheetNames.find((n: string) => !n.toLowerCase().includes("instruction")) ||
@@ -377,12 +523,32 @@ export const bulkImportService = {
         };
       }
 
+      // State variables for Product Context & Item Context Inheritance
       let lastCategory = "";
+      let lastCategoryCode = "";
+      let lastCategoryDesc = "";
+      let lastCategoryImage = "";
+      let lastCategorySort = 0;
+
       let lastProductSku = "";
       let lastProductName = "";
+      let lastProductCode = "";
       let lastProductDesc = "";
       let lastBrand = "";
       let lastHsn = "";
+      let lastProductImage = "";
+
+      let lastItemName = "";
+      let lastItemCode = "";
+      let lastVegType: "veg" | "nonveg" | "vegan" | "na" = "veg";
+      let lastShelfLife = "";
+      let lastIsFeatured = false;
+      let lastIsReadyToMix = false;
+      let lastCookingRecipe = "";
+      let lastShortDesc = "";
+      let lastItemDesc = "";
+      let lastIngredients = "";
+      let lastItemImage = "";
 
       for (let idx = 0; idx < rawRows.length; idx++) {
         const row = rawRows[idx];
@@ -393,41 +559,97 @@ export const bulkImportService = {
           continue;
         }
 
-        let cat = safeStr(row.category || row.category_name);
-        let pSku = safeStr(row.product_sku);
-        let pName = safeStr(row.product_name || row.name);
-        let pDesc = safeStr(row.product_description || row.description);
-        let brand = safeStr(row.brand);
-        let hsn = safeStr(row.hsn_code);
+        // ── Raw field extraction with aliases ──
+        let cat = safeStr(row.category_name || row.category);
+        let catCode = safeStr(row.category_code || row.category_slug);
+        let catDesc = safeStr(row.category_description);
+        let catImage = safeStr(row.category_image || row.category_icon || row.icon);
+        let rawCatSort = row.category_sort_order ?? row.sort_order;
 
-        // Variant / Item fields
-        const varName = safeStr(row.variant_name || row.item_name);
-        const unit = safeStr(row.unit).toLowerCase();
-        const rawUnitVal = row.unit_value;
-        const varSku = safeStr(row.variant_sku || row.sku);
+        let pSku = safeStr(row.product_sku || row.sku);
+        let pName = safeStr(row.product_name || row.name);
+        let pCode = safeStr(row.product_code || row.product_slug);
+        let brand = safeStr(row.brand || row.brand_name);
+        let hsn = safeStr(row.hsn_code || row.hsn);
+        let pDesc = safeStr(row.product_description || row.description);
+        let pImage = safeStr(row.product_image || row.image_url);
+
+        let varName = safeStr(row.item_name || row.variant_name);
+        let varCode = safeStr(row.item_code || row.variant_code || row.variant_slug);
+        let rawVegType = safeStr(row.veg_type || row.dietary_type);
+        let shelfLife = safeStr(row.shelf_life || row.best_before);
+        let isFeatured = safeBool(row.is_featured ?? row.featured, false);
+        let isReadyToMix = safeBool(row.is_ready_to_mix ?? row.ready_to_mix, false);
+        let cookingRecipe = safeStr(row.cooking_recipe || row.recipe);
+        let shortDesc = safeStr(row.short_description);
+        let itemDesc = safeStr(row.item_description || row.variant_description);
+        let ingredients = safeStr(row.ingredients);
+        let itemImage = safeStr(row.item_image || row.variant_image);
+        let outOfStock = safeBool(row.out_of_stock, false);
+        let isActive = safeBool(row.is_active, true);
+
+        const unit = safeStr(row.unit || row.unit_code).toLowerCase();
+        const rawUnitVal = row.unit_value ?? row.pack_size;
+        const varSku = safeStr(row.variant_sku || row.pack_sku);
         const rawPrice = row.price != null && row.price !== "" ? row.price : row.base_price;
         const rawStock = row.stock_qty != null && row.stock_qty !== "" ? row.stock_qty : row.stock;
         const rawReorder = row.reorder_level;
-        const isDefault = safeBool(row.is_default);
-        const vegType = safeStr(row.veg_type).toLowerCase();
-        const shelfLife = safeStr(row.shelf_life);
-        const shortDescription = safeStr(row.short_description);
+        const isDefault = safeBool(row.is_default, false);
 
-        // Product Context Inheritance
+        // ── Product Context Inheritance ──
         if (pSku) {
           lastProductSku = pSku;
           if (cat) lastCategory = cat;
+          if (catCode) lastCategoryCode = catCode;
+          if (catDesc) lastCategoryDesc = catDesc;
+          if (catImage) lastCategoryImage = catImage;
+          if (rawCatSort != null && rawCatSort !== "") lastCategorySort = Number(rawCatSort) || 0;
           if (pName) lastProductName = pName;
-          if (pDesc) lastProductDesc = pDesc;
+          if (pCode) lastProductCode = pCode;
           if (brand) lastBrand = brand;
           if (hsn) lastHsn = hsn;
+          if (pDesc) lastProductDesc = pDesc;
+          if (pImage) lastProductImage = pImage;
         } else if (lastProductSku && (!pName || pName.toLowerCase() === lastProductName.toLowerCase())) {
           pSku = lastProductSku;
           if (!cat) cat = lastCategory;
+          if (!catCode) catCode = lastCategoryCode;
+          if (!catDesc) catDesc = lastCategoryDesc;
+          if (!catImage) catImage = lastCategoryImage;
+          if (rawCatSort == null || rawCatSort === "") rawCatSort = lastCategorySort;
           if (!pName) pName = lastProductName;
-          if (!pDesc) pDesc = lastProductDesc;
+          if (!pCode) pCode = lastProductCode;
           if (!brand) brand = lastBrand;
           if (!hsn) hsn = lastHsn;
+          if (!pDesc) pDesc = lastProductDesc;
+          if (!pImage) pImage = lastProductImage;
+        }
+
+        // ── Item Context Inheritance ──
+        if (varName) {
+          lastItemName = varName;
+          if (varCode) lastItemCode = varCode;
+          if (rawVegType) lastVegType = parseVegType(rawVegType) || "veg";
+          if (shelfLife) lastShelfLife = shelfLife;
+          lastIsFeatured = isFeatured;
+          lastIsReadyToMix = isReadyToMix;
+          if (cookingRecipe) lastCookingRecipe = cookingRecipe;
+          if (shortDesc) lastShortDesc = shortDesc;
+          if (itemDesc) lastItemDesc = itemDesc;
+          if (ingredients) lastIngredients = ingredients;
+          if (itemImage) lastItemImage = itemImage;
+        } else if (lastItemName && pSku.toUpperCase() === lastProductSku.toUpperCase()) {
+          varName = lastItemName;
+          if (!varCode) varCode = lastItemCode;
+          if (!rawVegType) rawVegType = lastVegType;
+          if (!shelfLife) shelfLife = lastShelfLife;
+          isFeatured = lastIsFeatured;
+          isReadyToMix = lastIsReadyToMix;
+          if (!cookingRecipe) cookingRecipe = lastCookingRecipe;
+          if (!shortDesc) shortDesc = lastShortDesc;
+          if (!itemDesc) itemDesc = lastItemDesc;
+          if (!ingredients) ingredients = lastIngredients;
+          if (!itemImage) itemImage = lastItemImage;
         }
 
         // ─── 1. Category Field Validation ───
@@ -437,7 +659,7 @@ export const bulkImportService = {
             sheet: dataSheetName,
             status: "rejected",
             name: pName || pSku || `Row #${rowNum}`,
-            reason: "Category is required",
+            reason: "Category name is required",
           });
           continue;
         }
@@ -474,10 +696,12 @@ export const bulkImportService = {
             !categoryMap.has(parentCat.toLowerCase()) &&
             !sheetSeenCatNames.has(parentCat.toLowerCase())
           ) {
+            const parentSlug = makeUniqueCode(parentCat, usedCatSlugs, 170);
             sheetSeenCatNames.add(parentCat.toLowerCase());
+            sheetSeenCatCodes.add(parentSlug.toUpperCase());
             validCats.push({
               name: parentCat,
-              slug: makeUniqueSlug(parentCat, usedCatSlugs),
+              slug: parentSlug,
               sortOrder: validCats.length + 1,
             });
           }
@@ -504,16 +728,85 @@ export const bulkImportService = {
           continue;
         }
 
+        // Category Code Validation (from Create Category schema)
+        let finalCatCode = catCode;
+        if (finalCatCode) {
+          if (!/^[A-Za-z0-9_]+$/.test(finalCatCode)) {
+            rejected.push({
+              row: rowNum,
+              sheet: dataSheetName,
+              status: "rejected",
+              name: catName,
+              reason: `Category code "${finalCatCode}" can only contain letters, numbers, and underscores (no spaces or other special characters)`,
+            });
+            continue;
+          }
+          if (finalCatCode.length > 170) {
+            rejected.push({
+              row: rowNum,
+              sheet: dataSheetName,
+              status: "rejected",
+              name: catName,
+              reason: "Category code cannot exceed 170 characters",
+            });
+            continue;
+          }
+        } else {
+          finalCatCode = makeUniqueCode(catName, usedCatSlugs, 170);
+        }
+
+        if (catDesc && catDesc.length > 2000) {
+          rejected.push({
+            row: rowNum,
+            sheet: dataSheetName,
+            status: "rejected",
+            name: catName,
+            reason: "Category description cannot exceed 2000 characters",
+          });
+          continue;
+        }
+
+        if (catImage && catImage.length > 500) {
+          rejected.push({
+            row: rowNum,
+            sheet: dataSheetName,
+            status: "rejected",
+            name: catName,
+            reason: "Category image path cannot exceed 500 characters",
+          });
+          continue;
+        }
+
+        let catSortOrder = validCats.length + 1;
+        if (rawCatSort != null && rawCatSort !== "") {
+          const sNum = parseFloat(String(rawCatSort));
+          if (isNaN(sNum) || !Number.isInteger(sNum) || sNum < 0 || sNum > 100) {
+            rejected.push({
+              row: rowNum,
+              sheet: dataSheetName,
+              status: "rejected",
+              name: catName,
+              reason: "Category sort order must be an integer between 0 and 100",
+            });
+            continue;
+          }
+          catSortOrder = sNum;
+        }
+
         if (
           !categoryMap.has(catName.toLowerCase()) &&
           !sheetSeenCatNames.has(catName.toLowerCase())
         ) {
           sheetSeenCatNames.add(catName.toLowerCase());
+          sheetSeenCatCodes.add(finalCatCode.toUpperCase());
+          usedCatSlugs.add(finalCatCode.toUpperCase());
           validCats.push({
             name: catName,
-            slug: makeUniqueSlug(catName, usedCatSlugs),
+            slug: finalCatCode.toUpperCase(),
             parentName: parentCat,
-            sortOrder: validCats.length + 1,
+            description: catDesc || undefined,
+            icon: catImage || undefined,
+            sortOrder: catSortOrder,
           });
         }
         cat = catName;
@@ -573,19 +866,43 @@ export const bulkImportService = {
           continue;
         }
 
-        // Product level descriptions & references
-        if (pDesc && pDesc.length > 2000) {
-          rejected.push({
-            row: rowNum,
-            sheet: dataSheetName,
-            status: "rejected",
-            name: pName,
-            reason: "Product description cannot exceed 2000 characters",
-          });
-          continue;
+        // Product Code Validation (from Create Product schema)
+        let finalProdCode = pCode ? pCode.toUpperCase().replace(/\s+/g, "_") : "";
+        if (finalProdCode) {
+          if (finalProdCode.length > 220) {
+            rejected.push({
+              row: rowNum,
+              sheet: dataSheetName,
+              status: "rejected",
+              name: pName,
+              reason: "Product code cannot exceed 220 characters",
+            });
+            continue;
+          }
+          if (
+            usedProdSlugs.has(finalProdCode) &&
+            !sheetSeenProductCodes.has(finalProdCode)
+          ) {
+            rejected.push({
+              row: rowNum,
+              sheet: dataSheetName,
+              status: "rejected",
+              name: pName,
+              reason: `Product code "${finalProdCode}" already exists in database`,
+            });
+            continue;
+          }
+        } else {
+          finalProdCode = makeUniqueCode(
+            `${finalCatCode}_${pSkuUpper.replace(/[^A-Z0-9_]/g, "_")}`,
+            usedProdSlugs,
+            220
+          );
         }
 
-        let brandId: bigint | undefined;
+        // Brand lookup & linking (link if exists in DB, otherwise null / default)
+        let brandId: bigint | undefined = defaultBrandId;
+        let matchedBrandName: string | undefined = defaultBrandName;
         if (brand) {
           if (brand.length > 150) {
             rejected.push({
@@ -597,22 +914,62 @@ export const bulkImportService = {
             });
             continue;
           }
-          brandId = brandMap.get(brand.toLowerCase());
+          const foundId = brandMap.get(brand.toLowerCase());
+          if (foundId) {
+            brandId = foundId;
+            matchedBrandName = brand;
+          } else {
+            // Not registered by admin yet - do not auto-create and do not reject
+            matchedBrandName = brand;
+            brandId = defaultBrandId;
+          }
         }
 
+        // HSN Code lookup & linking (link if exists in DB, otherwise null)
         let hsnCodeId: bigint | undefined;
+        let matchedHsnCode: string | undefined;
         if (hsn) {
-          if (hsn.length > 50) {
+          if (hsn.length > 20) {
             rejected.push({
               row: rowNum,
               sheet: dataSheetName,
               status: "rejected",
               name: pName,
-              reason: "HSN code cannot exceed 50 characters",
+              reason: "HSN code cannot exceed 20 characters",
             });
             continue;
           }
-          hsnCodeId = hsnMap.get(hsn.toLowerCase());
+          const foundHsnId = hsnMap.get(hsn.toLowerCase());
+          if (foundHsnId) {
+            hsnCodeId = foundHsnId;
+            matchedHsnCode = hsn;
+          } else {
+            // Not registered by admin yet - do not auto-create and do not reject
+            matchedHsnCode = hsn;
+            hsnCodeId = undefined;
+          }
+        }
+
+        if (pDesc && pDesc.length > 2000) {
+          rejected.push({
+            row: rowNum,
+            sheet: dataSheetName,
+            status: "rejected",
+            name: pName,
+            reason: "Product description cannot exceed 2000 characters",
+          });
+          continue;
+        }
+
+        if (pImage && pImage.length > 500) {
+          rejected.push({
+            row: rowNum,
+            sheet: dataSheetName,
+            status: "rejected",
+            name: pName,
+            reason: "Product image URL cannot exceed 500 characters",
+          });
+          continue;
         }
 
         // Register Product if not registered yet
@@ -621,10 +978,13 @@ export const bulkImportService = {
           const prodBasePrice = isNaN(numPrice) || numPrice < 0 ? 0 : numPrice;
 
           sheetSeenProductSkus.add(pSkuUpper);
+          sheetSeenProductCodes.add(finalProdCode);
+          usedProdSlugs.add(finalProdCode);
+
           validProds.push({
             sku: pSkuUpper,
             name: pName,
-            slug: makeUniqueSlug(pName, usedProdSlugs),
+            slug: finalProdCode,
             categoryName: cat,
             basePrice: prodBasePrice,
             salePrice:
@@ -632,8 +992,11 @@ export const bulkImportService = {
                 ? parseFloat(String(row.sale_price))
                 : undefined,
             description: pDesc || undefined,
+            brandName: matchedBrandName,
             brandId,
+            hsnCode: matchedHsnCode,
             hsnCodeId,
+            productImage: pImage || undefined,
           });
         }
 
@@ -644,7 +1007,7 @@ export const bulkImportService = {
             sheet: dataSheetName,
             status: "rejected",
             name: pName,
-            reason: "Variant name is required",
+            reason: "Item / Variant name is required",
           });
           continue;
         }
@@ -654,18 +1017,54 @@ export const bulkImportService = {
             sheet: dataSheetName,
             status: "rejected",
             name: varName,
-            reason: "Variant name cannot exceed 100 characters",
+            reason: "Item name cannot exceed 100 characters",
           });
           continue;
         }
 
-        if (vegType && !["veg", "nonveg", "vegan", "na"].includes(vegType)) {
+        // Item Code Validation (from Create Item schema)
+        let finalItemCode = varCode ? varCode.toUpperCase().replace(/\s+/g, "_") : "";
+        if (finalItemCode) {
+          if (finalItemCode.length > 255) {
+            rejected.push({
+              row: rowNum,
+              sheet: dataSheetName,
+              status: "rejected",
+              name: varName,
+              reason: "Item code cannot exceed 255 characters",
+            });
+            continue;
+          }
+          if (
+            usedVarSlugs.has(finalItemCode) &&
+            !sheetSeenVariantCodes.has(finalItemCode)
+          ) {
+            rejected.push({
+              row: rowNum,
+              sheet: dataSheetName,
+              status: "rejected",
+              name: varName,
+              reason: `Item code "${finalItemCode}" already exists in database`,
+            });
+            continue;
+          }
+        } else {
+          finalItemCode = makeUniqueCode(
+            `${finalProdCode}_${slugify(varName).replace(/-/g, "_").toUpperCase()}`,
+            usedVarSlugs,
+            250
+          );
+        }
+
+        // Dietary Type (veg_type) Validation
+        const parsedVeg = parseVegType(rawVegType);
+        if (!parsedVeg) {
           rejected.push({
             row: rowNum,
             sheet: dataSheetName,
             status: "rejected",
             name: varName,
-            reason: `Invalid vegType "${vegType}". Allowed values: veg, nonveg, vegan, na`,
+            reason: `Invalid dietary type "${rawVegType}". Allowed values: veg, nonveg, vegan, na`,
           });
           continue;
         }
@@ -681,13 +1080,24 @@ export const bulkImportService = {
           continue;
         }
 
-        if (shortDescription && shortDescription.length > 500) {
+        if (shortDesc && shortDesc.length > 500) {
           rejected.push({
             row: rowNum,
             sheet: dataSheetName,
             status: "rejected",
             name: varName,
             reason: "Short description cannot exceed 500 characters",
+          });
+          continue;
+        }
+
+        if (itemImage && itemImage.length > 500) {
+          rejected.push({
+            row: rowNum,
+            sheet: dataSheetName,
+            status: "rejected",
+            name: varName,
+            reason: "Item image URL cannot exceed 500 characters",
           });
           continue;
         }
@@ -800,17 +1210,7 @@ export const bulkImportService = {
           continue;
         }
         const priceNum = parseFloat(String(rawPrice));
-        if (isNaN(priceNum) || priceNum < 0) {
-          rejected.push({
-            row: rowNum,
-            sheet: dataSheetName,
-            status: "rejected",
-            name: varSkuUpper,
-            reason: "Price cannot be negative",
-          });
-          continue;
-        }
-        if (priceNum === 0) {
+        if (isNaN(priceNum) || priceNum <= 0) {
           rejected.push({
             row: rowNum,
             sheet: dataSheetName,
@@ -834,23 +1234,13 @@ export const bulkImportService = {
         let stockQty = 0;
         if (rawStock != null && rawStock !== "") {
           const sNum = parseFloat(String(rawStock));
-          if (isNaN(sNum) || sNum < 0) {
+          if (isNaN(sNum) || sNum < 0 || !Number.isInteger(sNum)) {
             rejected.push({
               row: rowNum,
               sheet: dataSheetName,
               status: "rejected",
               name: varSkuUpper,
-              reason: "Stock quantity must be greater than or equal to 0",
-            });
-            continue;
-          }
-          if (!Number.isInteger(sNum)) {
-            rejected.push({
-              row: rowNum,
-              sheet: dataSheetName,
-              status: "rejected",
-              name: varSkuUpper,
-              reason: "Stock quantity must be an integer",
+              reason: "Stock quantity must be an integer greater than or equal to 0",
             });
             continue;
           }
@@ -890,17 +1280,20 @@ export const bulkImportService = {
             sheet: dataSheetName,
             status: "rejected",
             name: varSkuUpper,
-            reason: `Duplicate measurement ${unitValNum}${unit} for variant "${varName}" under product "${pSkuUpper}"`,
+            reason: `Duplicate measurement ${unitValNum}${unit} for item "${varName}" under product "${pSkuUpper}"`,
           });
           continue;
         }
 
         sheetSeenVariantSkus.add(varSkuUpper);
+        sheetSeenVariantCodes.add(finalItemCode);
+        usedVarSlugs.add(finalItemCode);
         sheetSeenVarUnitValue.add(unitValKey);
 
         validVars.push({
           productSku: pSkuUpper,
           variantName: varName,
+          variantCode: finalItemCode,
           unit,
           unitValue: unitValNum,
           variantSku: varSkuUpper,
@@ -908,9 +1301,17 @@ export const bulkImportService = {
           stockQty,
           reorderLevel,
           isDefault,
-          vegType: vegType || undefined,
+          vegType: parsedVeg,
           shelfLife: shelfLife || undefined,
-          shortDescription: shortDescription || undefined,
+          isFeatured,
+          isReadyToMix,
+          cookingRecipe: cookingRecipe || undefined,
+          shortDescription: shortDesc || undefined,
+          description: itemDesc || undefined,
+          ingredients: ingredients || undefined,
+          itemImage: itemImage || undefined,
+          outOfStock,
+          isActive,
         });
       }
     }
@@ -921,7 +1322,9 @@ export const bulkImportService = {
     else {
       const rawCats = parseSheet<RawCategoryRow>("Categories");
       const rawProds = parseSheet<RawProductRow>("Products");
-      const rawVars = parseSheet<RawVariantRow>("Variants");
+      const rawVars = parseSheet<RawVariantRow>(
+        sheetNames.includes("Variants") ? "Variants" : "Items"
+      );
       totalRows = rawCats.length + rawProds.length + rawVars.length;
 
       // 1. Validate Categories Sheet
@@ -931,6 +1334,12 @@ export const bulkImportService = {
         if (isRowEmpty(row as Record<string, unknown>)) continue;
 
         const name = safeStr(row.category_name || row.category);
+        let code = safeStr(row.category_code || row.category_slug || row.slug);
+        const parentName = safeStr(row.parent_category);
+        const desc = safeStr(row.category_description || row.description);
+        const icon = safeStr(row.category_image || row.image || row.icon);
+        const rawSort = row.category_sort_order ?? row.sort_order;
+
         if (!name) {
           rejected.push({
             row: rowNum,
@@ -952,7 +1361,31 @@ export const bulkImportService = {
           continue;
         }
 
-        const parentName = safeStr(row.parent_category);
+        if (code) {
+          if (!/^[A-Za-z0-9_]+$/.test(code)) {
+            rejected.push({
+              row: rowNum,
+              sheet: "Categories",
+              status: "rejected",
+              name,
+              reason: `Category code "${code}" can only contain letters, numbers, and underscores`,
+            });
+            continue;
+          }
+          if (code.length > 170) {
+            rejected.push({
+              row: rowNum,
+              sheet: "Categories",
+              status: "rejected",
+              name,
+              reason: "Category code cannot exceed 170 characters",
+            });
+            continue;
+          }
+        } else {
+          code = makeUniqueCode(name, usedCatSlugs, 170);
+        }
+
         if (parentName && parentName.toLowerCase() === name.toLowerCase()) {
           rejected.push({
             row: rowNum,
@@ -964,7 +1397,6 @@ export const bulkImportService = {
           continue;
         }
 
-        const desc = safeStr(row.description);
         if (desc && desc.length > 2000) {
           rejected.push({
             row: rowNum,
@@ -976,36 +1408,27 @@ export const bulkImportService = {
           continue;
         }
 
+        if (icon && icon.length > 500) {
+          rejected.push({
+            row: rowNum,
+            sheet: "Categories",
+            status: "rejected",
+            name,
+            reason: "Category image path cannot exceed 500 characters",
+          });
+          continue;
+        }
+
         let sortOrder = validCats.length + 1;
-        if (row.sort_order != null && row.sort_order !== "") {
-          const sNum = parseFloat(String(row.sort_order));
-          if (isNaN(sNum) || !Number.isInteger(sNum)) {
+        if (rawSort != null && rawSort !== "") {
+          const sNum = parseFloat(String(rawSort));
+          if (isNaN(sNum) || !Number.isInteger(sNum) || sNum < 0 || sNum > 100) {
             rejected.push({
               row: rowNum,
               sheet: "Categories",
               status: "rejected",
               name,
-              reason: "Sort order must be an integer",
-            });
-            continue;
-          }
-          if (sNum < 0) {
-            rejected.push({
-              row: rowNum,
-              sheet: "Categories",
-              status: "rejected",
-              name,
-              reason: "Sort order cannot be negative",
-            });
-            continue;
-          }
-          if (sNum > 100) {
-            rejected.push({
-              row: rowNum,
-              sheet: "Categories",
-              status: "rejected",
-              name,
-              reason: "Sort order cannot exceed 100",
+              reason: "Sort order must be an integer between 0 and 100",
             });
             continue;
           }
@@ -1013,7 +1436,7 @@ export const bulkImportService = {
         }
 
         if (categoryMap.has(name.toLowerCase())) {
-          continue; // Already exists in DB
+          continue;
         }
 
         if (sheetSeenCatNames.has(name.toLowerCase())) {
@@ -1022,17 +1445,21 @@ export const bulkImportService = {
             sheet: "Categories",
             status: "rejected",
             name,
-            reason: "Duplicate category name in sheet",
+            reason: `Duplicate category name "${name}" in sheet`,
           });
           continue;
         }
 
         sheetSeenCatNames.add(name.toLowerCase());
+        sheetSeenCatCodes.add(code.toUpperCase());
+        usedCatSlugs.add(code.toUpperCase());
+
         validCats.push({
           name,
-          slug: makeUniqueSlug(name, usedCatSlugs),
+          slug: code.toUpperCase(),
           parentName: parentName || undefined,
           description: desc || undefined,
+          icon: icon || undefined,
           sortOrder,
         });
       }
@@ -1044,8 +1471,13 @@ export const bulkImportService = {
         if (isRowEmpty(row as Record<string, unknown>)) continue;
 
         const name = safeStr(row.product_name || row.name);
-        const sku = safeStr(row.sku || row.product_sku);
+        const sku = safeStr(row.product_sku || row.sku);
+        let code = safeStr(row.product_code || row.product_slug || row.slug);
         const categoryName = safeStr(row.category_name || row.category);
+        const brand = safeStr(row.brand || row.brand_name);
+        const hsn = safeStr(row.hsn_code || row.hsn);
+        const desc = safeStr(row.product_description || row.description);
+        const pImage = safeStr(row.product_image || row.image_url);
 
         if (!name) {
           rejected.push({
@@ -1122,34 +1554,87 @@ export const bulkImportService = {
           continue;
         }
 
+        if (code) {
+          code = code.toUpperCase().replace(/\s+/g, "_");
+          if (code.length > 220) {
+            rejected.push({
+              row: rowNum,
+              sheet: "Products",
+              status: "rejected",
+              name,
+              reason: "Product code cannot exceed 220 characters",
+            });
+            continue;
+          }
+          if (usedProdSlugs.has(code)) {
+            rejected.push({
+              row: rowNum,
+              sheet: "Products",
+              status: "rejected",
+              name,
+              reason: `Product code "${code}" already exists in database`,
+            });
+            continue;
+          }
+        } else {
+          code = makeUniqueCode(skuUpper.replace(/[^A-Z0-9_]/g, "_"), usedProdSlugs, 220);
+        }
+
+        let brandId: bigint | undefined = defaultBrandId;
+        let matchedBrandName: string | undefined = defaultBrandName;
+        if (brand) {
+          if (brand.length > 150) {
+            rejected.push({
+              row: rowNum,
+              sheet: "Products",
+              status: "rejected",
+              name,
+              reason: "Brand name cannot exceed 150 characters",
+            });
+            continue;
+          }
+          const foundId = brandMap.get(brand.toLowerCase());
+          if (foundId) {
+            brandId = foundId;
+            matchedBrandName = brand;
+          } else {
+            matchedBrandName = brand;
+            brandId = defaultBrandId;
+          }
+        }
+
+        let hsnCodeId: bigint | undefined;
+        let matchedHsnCode: string | undefined;
+        if (hsn) {
+          if (hsn.length > 20) {
+            rejected.push({
+              row: rowNum,
+              sheet: "Products",
+              status: "rejected",
+              name,
+              reason: "HSN code cannot exceed 20 characters",
+            });
+            continue;
+          }
+          const foundHsn = hsnMap.get(hsn.toLowerCase());
+          if (foundHsn) {
+            hsnCodeId = foundHsn;
+            matchedHsnCode = hsn;
+          } else {
+            matchedHsnCode = hsn;
+            hsnCodeId = undefined;
+          }
+        }
+
         let basePrice = 0;
         const rawP = row.base_price != null && row.base_price !== "" ? row.base_price : row.price;
         if (rawP != null && rawP !== "") {
           const pNum = parseFloat(String(rawP));
-          if (isNaN(pNum) || pNum < 0) {
-            rejected.push({
-              row: rowNum,
-              sheet: "Products",
-              status: "rejected",
-              name: skuUpper,
-              reason: "Base price cannot be negative",
-            });
-            continue;
+          if (!isNaN(pNum) && pNum >= 0) {
+            basePrice = pNum;
           }
-          if (pNum > 99999999.99) {
-            rejected.push({
-              row: rowNum,
-              sheet: "Products",
-              status: "rejected",
-              name: skuUpper,
-              reason: "Price exceeds maximum allowed amount",
-            });
-            continue;
-          }
-          basePrice = pNum;
         }
 
-        const desc = safeStr(row.description || row.product_description);
         if (desc && desc.length > 2000) {
           rejected.push({
             row: rowNum,
@@ -1162,10 +1647,13 @@ export const bulkImportService = {
         }
 
         sheetSeenProductSkus.add(skuUpper);
+        sheetSeenProductCodes.add(code);
+        usedProdSlugs.add(code);
+
         validProds.push({
           sku: skuUpper,
           name,
-          slug: makeUniqueSlug(name, usedProdSlugs),
+          slug: code,
           categoryName,
           basePrice,
           salePrice:
@@ -1173,6 +1661,11 @@ export const bulkImportService = {
               ? parseFloat(String(row.sale_price))
               : undefined,
           description: desc || undefined,
+          brandName: matchedBrandName,
+          brandId,
+          hsnCode: matchedHsnCode,
+          hsnCodeId,
+          productImage: pImage || undefined,
         });
       }
 
@@ -1183,14 +1676,27 @@ export const bulkImportService = {
         if (isRowEmpty(row as Record<string, unknown>)) continue;
 
         const productSku = safeStr(row.product_sku || row.sku).toUpperCase();
-        const variantName = safeStr(row.variant_name || row.name);
-        const unit = safeStr(row.unit).toLowerCase();
-        const rawUnitVal = row.unit_value;
-        const variantSku = safeStr(row.variant_sku).toUpperCase();
+        const variantName = safeStr(row.item_name || row.variant_name || row.name);
+        let variantCode = safeStr(row.item_code || row.variant_code || row.variant_slug || row.slug);
+        const rawVegType = safeStr(row.veg_type || row.dietary_type);
+        const shelfLife = safeStr(row.shelf_life || row.best_before);
+        const isFeatured = safeBool(row.is_featured ?? row.featured, false);
+        const isReadyToMix = safeBool(row.is_ready_to_mix ?? row.ready_to_mix, false);
+        const cookingRecipe = safeStr(row.cooking_recipe || row.recipe);
+        const shortDescription = safeStr(row.short_description);
+        const description = safeStr(row.item_description || row.variant_description || row.description);
+        const ingredients = safeStr(row.ingredients);
+        const itemImage = safeStr(row.item_image || row.variant_image);
+        const outOfStock = safeBool(row.out_of_stock, false);
+        const isActive = safeBool(row.is_active, true);
+
+        const unit = safeStr(row.unit || row.unit_code).toLowerCase();
+        const rawUnitVal = row.unit_value ?? row.pack_size;
+        const variantSku = safeStr(row.variant_sku || row.pack_sku).toUpperCase();
         const rawPrice = row.price != null && row.price !== "" ? row.price : row.base_price;
         const rawStock = row.stock_qty != null && row.stock_qty !== "" ? row.stock_qty : row.stock;
         const rawReorder = row.reorder_level;
-        const isDefault = safeBool(row.is_default);
+        const isDefault = safeBool(row.is_default, false);
 
         if (!productSku) {
           rejected.push({
@@ -1234,6 +1740,38 @@ export const bulkImportService = {
           continue;
         }
 
+        if (variantCode) {
+          variantCode = variantCode.toUpperCase().replace(/\s+/g, "_");
+          if (variantCode.length > 255) {
+            rejected.push({
+              row: rowNum,
+              sheet: "Variants",
+              status: "rejected",
+              name: variantName,
+              reason: "Variant code cannot exceed 255 characters",
+            });
+            continue;
+          }
+        } else {
+          variantCode = makeUniqueCode(
+            `${productSku}_${slugify(variantName).replace(/-/g, "_").toUpperCase()}`,
+            usedVarSlugs,
+            250
+          );
+        }
+
+        const parsedVeg = parseVegType(rawVegType);
+        if (!parsedVeg) {
+          rejected.push({
+            row: rowNum,
+            sheet: "Variants",
+            status: "rejected",
+            name: variantName,
+            reason: `Invalid dietary type "${rawVegType}". Allowed values: veg, nonveg, vegan, na`,
+          });
+          continue;
+        }
+
         if (!unit) {
           rejected.push({
             row: rowNum,
@@ -1273,16 +1811,6 @@ export const bulkImportService = {
             status: "rejected",
             name: variantSku || variantName,
             reason: "Pack size (unit_value) must be greater than 0",
-          });
-          continue;
-        }
-        if (unitValNum > 99999999.99) {
-          rejected.push({
-            row: rowNum,
-            sheet: "Variants",
-            status: "rejected",
-            name: variantSku || variantName,
-            reason: "Pack size exceeds maximum allowed amount",
           });
           continue;
         }
@@ -1349,16 +1877,6 @@ export const bulkImportService = {
           });
           continue;
         }
-        if (priceNum > 99999999.99) {
-          rejected.push({
-            row: rowNum,
-            sheet: "Variants",
-            status: "rejected",
-            name: variantSku,
-            reason: "Price exceeds maximum allowed amount",
-          });
-          continue;
-        }
 
         let stockQty = 0;
         if (rawStock != null && rawStock !== "") {
@@ -1379,17 +1897,9 @@ export const bulkImportService = {
         let reorderLevel = 10;
         if (rawReorder != null && rawReorder !== "") {
           const rNum = parseFloat(String(rawReorder));
-          if (isNaN(rNum) || rNum < 0 || !Number.isInteger(rNum)) {
-            rejected.push({
-              row: rowNum,
-              sheet: "Variants",
-              status: "rejected",
-              name: variantSku,
-              reason: "Reorder level must be an integer greater than or equal to 0",
-            });
-            continue;
+          if (!isNaN(rNum) && rNum >= 0 && Number.isInteger(rNum)) {
+            reorderLevel = rNum;
           }
-          reorderLevel = rNum;
         }
 
         const unitValKey = `${productSku}::${variantName.toLowerCase()}::${unit}::${unitValNum}`;
@@ -1405,11 +1915,14 @@ export const bulkImportService = {
         }
 
         sheetSeenVariantSkus.add(variantSku);
+        sheetSeenVariantCodes.add(variantCode);
+        usedVarSlugs.add(variantCode);
         sheetSeenVarUnitValue.add(unitValKey);
 
         validVars.push({
           productSku,
           variantName,
+          variantCode,
           unit,
           unitValue: unitValNum,
           variantSku,
@@ -1417,6 +1930,17 @@ export const bulkImportService = {
           stockQty,
           reorderLevel,
           isDefault,
+          vegType: parsedVeg,
+          shelfLife: shelfLife || undefined,
+          isFeatured,
+          isReadyToMix,
+          cookingRecipe: cookingRecipe || undefined,
+          shortDescription: shortDescription || undefined,
+          description: description || undefined,
+          ingredients: ingredients || undefined,
+          itemImage: itemImage || undefined,
+          outOfStock,
+          isActive,
         });
       }
     }
@@ -1433,9 +1957,13 @@ export const bulkImportService = {
       preview.push({
         categoryName: prod.categoryName,
         productName: prod.name,
+        productCode: prod.slug,
         sku: prod.sku,
+        brand: prod.brandName,
         variants: vars.map((v) => ({
           variantName: v.variantName,
+          variantCode: v.variantCode,
+          vegType: v.vegType,
           unit: v.unit,
           unitValue: v.unitValue,
           variantSku: v.variantSku,
@@ -1469,12 +1997,13 @@ export const bulkImportService = {
         if (cat.parentName) {
           parentId = categoryMap.get(cat.parentName.toLowerCase());
         }
-        const created = await tx.productCategory.create({
+        const createdCat = await tx.productCategory.create({
           data: {
             uuid: crypto.randomUUID(),
             name: cat.name,
             slug: cat.slug,
-            description: cat.description,
+            description: cat.description ?? null,
+            icon: cat.icon ?? null,
             parentId: parentId ?? null,
             sortOrder: cat.sortOrder,
             isActive: true,
@@ -1483,13 +2012,34 @@ export const bulkImportService = {
             updated_by: adminUserId ?? null,
           },
         });
-        categoryMap.set(cat.name.toLowerCase(), created.id);
+        categoryMap.set(cat.name.toLowerCase(), createdCat.id);
+        categoryMap.set(cat.slug.toLowerCase(), createdCat.id);
+
+        if (cat.icon) {
+          await tx.product_category_images.create({
+            data: {
+              uuid: crypto.randomUUID(),
+              category_id: createdCat.id,
+              image_url: cat.icon,
+              sort_order: 0,
+              is_active: true,
+              status: true,
+              created_by: adminUserId ?? null,
+              updated_by: adminUserId ?? null,
+            },
+          });
+        }
         importedCategories.push(cat.name);
       }
 
       // 6b. Insert products + variants
       for (const prod of validProds) {
         const catId = categoryMap.get(prod.categoryName.toLowerCase());
+        const resolvedBrandId =
+          prod.brandId ?? (prod.brandName ? brandMap.get(prod.brandName.toLowerCase()) : null);
+        const resolvedHsnId =
+          prod.hsnCodeId ?? (prod.hsnCode ? hsnMap.get(prod.hsnCode.toLowerCase()) : null);
+
         const createdProd = await tx.product.create({
           data: {
             uuid: crypto.randomUUID(),
@@ -1499,8 +2049,8 @@ export const bulkImportService = {
             base_price: prod.basePrice,
             sale_price: prod.salePrice ?? null,
             categoryId: catId ? catId : null,
-            brandId: prod.brandId ?? null,
-            hsn_code_id: prod.hsnCodeId ?? null,
+            brandId: resolvedBrandId ?? null,
+            hsn_code_id: resolvedHsnId ?? null,
             isActive: true,
             status: true,
             created_by: adminUserId ?? null,
@@ -1508,6 +2058,20 @@ export const bulkImportService = {
           },
         });
         importedProducts.push(prod.name);
+
+        if (prod.productImage) {
+          await tx.productImage.create({
+            data: {
+              productId: createdProd.id,
+              image_url: prod.productImage,
+              isPrimary: true,
+              sortOrder: 0,
+              is_active: true,
+              created_by: adminUserId ?? null,
+              updated_by: adminUserId ?? null,
+            },
+          });
+        }
 
         const vars = varsByProductSku.get(prod.sku) ?? [];
 
@@ -1522,11 +2086,6 @@ export const bulkImportService = {
         let isFirstVariant = true;
         for (const [, subvariants] of variantsByName) {
           const first = subvariants[0];
-          const variantSlug = makeUniqueSlug(
-            `${prod.slug}-${first.variantName}`,
-            usedVarSlugs
-          );
-
           let isVariantDefault = subvariants.some((sv) => sv.isDefault);
           if (isFirstVariant && !vars.some((v) => v.isDefault)) {
             isVariantDefault = true;
@@ -1538,15 +2097,38 @@ export const bulkImportService = {
               uuid: crypto.randomUUID(),
               productId: createdProd.id,
               variant_name: first.variantName,
-              slug: variantSlug,
+              slug: first.variantCode,
               is_default: isVariantDefault,
-              isActive: true,
+              isActive: first.isActive,
+              out_of_stock: first.outOfStock,
+              is_featured: first.isFeatured,
+              is_ready_to_mix: first.isReadyToMix,
+              cooking_recipe: first.cookingRecipe ?? null,
               shelf_life: first.shelfLife ?? null,
               short_description: first.shortDescription ?? null,
+              description: first.description ?? null,
+              ingredients: first.ingredients ?? null,
+              veg_type: first.vegType,
               created_by: adminUserId ?? null,
               updated_by: adminUserId ?? null,
             },
           });
+
+          if (first.itemImage) {
+            await tx.product_variant_images.create({
+              data: {
+                uuid: crypto.randomUUID(),
+                variant_id: createdVariant.id,
+                image_url: first.itemImage,
+                is_primary: true,
+                sort_order: 0,
+                is_active: true,
+                status: true,
+                created_by: adminUserId ?? null,
+                updated_by: adminUserId ?? null,
+              },
+            });
+          }
 
           // Ensure at least one subvariant in this variant is marked default
           if (!subvariants.some((sv) => sv.isDefault)) {
@@ -1566,7 +2148,7 @@ export const bulkImportService = {
                 sku: sv.variantSku,
                 base_price: sv.price,
                 is_default: sv.isDefault,
-                isActive: true,
+                isActive: sv.isActive,
                 created_by: adminUserId ?? null,
                 updated_by: adminUserId ?? null,
               },

@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { Heart } from "lucide-react";
+import { Heart, Sparkles } from "lucide-react";
 import { formatPrice, getImageUrl } from "@/lib/utils";
 import { ProductImage } from "@/components/common/ProductImage";
 import type { StorefrontProduct } from "@/constants/storefront";
@@ -27,6 +27,8 @@ export interface SnackCardProps {
   image?: string | null;
   /** Optional link href (defaults to `/products/${id}`) */
   href?: string;
+  /** Whether the item is a featured special */
+  isFeatured?: boolean;
   /** Explicit discount percentage (e.g. 10 for "10% OFF") */
   discountPercent?: number | null;
   /** List of pack size variants (e.g. 50g, 100g) */
@@ -61,6 +63,7 @@ export function SnackCard({
   subtitle,
   image,
   href,
+  isFeatured,
   discountPercent: explicitDiscount,
   variants = [],
   selectedVariantId: controlledSelectedVariantId,
@@ -80,6 +83,7 @@ export function SnackCard({
   const resolvedName = name || product?.name || "Traditional Snack";
   const resolvedImage = image || product?.image || "";
   const resolvedHref = href || (resolvedId ? `/products/${resolvedId}` : "#");
+  const resolvedIsFeatured = isFeatured !== undefined ? isFeatured : Boolean(product?.isFeatured);
 
   // Derive variants from StorefrontProduct if variants prop not explicitly given
   const resolvedVariants: SnackCardVariant[] = React.useMemo(() => {
@@ -147,12 +151,20 @@ export function SnackCard({
           />
         </Link>
 
-        {/* Discount Badge (Top-Left) using global danger color */}
-        {discount > 0 && (
-          <div className="absolute top-2.5 left-2.5 z-10 bg-[var(--danger-base)] text-white font-extrabold text-[11px] sm:text-xs px-2 py-0.5 uppercase tracking-wider rounded-[2px] shadow-xs pointer-events-none">
-            {discount}% OFF
-          </div>
-        )}
+        {/* Badges Container (Top-Left: Featured & Discount) */}
+        <div className="absolute top-2.5 left-2.5 z-10 flex flex-col items-start gap-1 pointer-events-none">
+          {resolvedIsFeatured && (
+            <div className="inline-flex items-center gap-1 bg-gradient-to-r from-[var(--primary-500)] to-[var(--primary-600)] text-[var(--secondary-shade-800)] font-black text-[10px] sm:text-[11px] px-2 py-0.5 uppercase tracking-wider rounded-[2px] shadow-xs">
+              <Sparkles className="w-3 h-3 fill-[var(--secondary-shade-800)] text-[var(--secondary-shade-800)] shrink-0" />
+              <span>Featured</span>
+            </div>
+          )}
+          {discount > 0 && (
+            <div className="bg-[var(--danger-base)] text-white font-extrabold text-[10px] sm:text-[11px] px-2 py-0.5 uppercase tracking-wider rounded-[2px] shadow-xs">
+              {discount}% OFF
+            </div>
+          )}
+        </div>
 
         {/* Wishlist Button (Top-Right) */}
         <button

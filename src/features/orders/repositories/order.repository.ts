@@ -123,6 +123,21 @@ export const orderDetailInclude = Prisma.validator<Prisma.OrderInclude>()({
       },
     },
   },
+  coupons: {
+    select: {
+      id: true,
+      code: true,
+      type: true,
+      value: true,
+    },
+  },
+  coupon_usage: {
+    where: { is_active: true },
+    select: {
+      id: true,
+      discount_amount: true,
+    },
+  },
 });
 
 export function formatOrderAddress(
@@ -308,6 +323,10 @@ export function formatOrderDetail(
     totalAmount: Number(order.totalAmount),
     totalItems,
     delivery: formatOrderDelivery((order as any).shipments),
+    couponCode: (order as any).coupons?.code ?? null,
+    couponDiscount: (order as any).coupon_usage?.[0]?.discount_amount
+      ? Number((order as any).coupon_usage[0].discount_amount)
+      : null,
     notes: order.notes ?? null,
     placedAt: order.placed_at ?? null,
     createdAt: order.createdAt,
@@ -400,6 +419,8 @@ export const orderRepository = {
   async createCustomerOrderTransaction(params: {
     userId: bigint;
     cartId: bigint;
+    couponId?: bigint | null;
+    couponDiscount?: number;
     subtotal: number;
     discountAmount?: number;
     shippingCharge?: number;
@@ -459,6 +480,7 @@ export const orderRepository = {
           orderNumber,
           userId: params.userId,
           cart_id: params.cartId,
+          couponId: params.couponId ?? null,
           order_status: (params.orderStatus ?? "pending") as any,
           payment_status: (params.paymentStatus ?? "pending") as any,
           subtotal: params.subtotal,
@@ -473,6 +495,23 @@ export const orderRepository = {
           updated_by: params.userId,
         },
       });
+
+      // 1b. Record coupon usage if a valid coupon was applied
+      if (params.couponId && (params.couponDiscount ?? 0) > 0) {
+        await tx.coupon_usage.create({
+          data: {
+            uuid: crypto.randomUUID(),
+            coupon_id: params.couponId,
+            user_id: params.userId,
+            order_id: createdOrder.id,
+            discount_amount: params.couponDiscount ?? 0,
+            used_at: now,
+            is_active: true,
+            created_by: params.userId,
+            updated_by: params.userId,
+          },
+        });
+      }
 
       // 2. Create Addresses (Shipping & Billing)
       await tx.orderAddress.createMany({
@@ -557,10 +596,11 @@ export const orderRepository = {
         },
       });
 
-      // 5. Convert Cart & Deactivate Items
+      // 5. Convert Cart & Deactivate Items & clear coupon_id
       await tx.cart.update({
         where: { id: params.cartId },
         data: {
+          coupon_id: null,
           status: "converted",
           last_activity_at: now,
           updatedAt: now,
@@ -975,6 +1015,12 @@ export const orderRepository = {
           created_by: params.changedBy,
           updated_by: params.changedBy,
         },
+      });
+
+      // Rollback coupon usage if applied, so customer gets their quota back
+      await tx.coupon_usage.updateMany({
+        where: { order_id: params.orderId, is_active: true },
+        data: { is_active: false, updated_at: now },
       });
 
       const updated = await tx.order.findUniqueOrThrow({

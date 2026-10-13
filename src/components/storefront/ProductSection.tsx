@@ -114,6 +114,7 @@ export function ProductSection({ selectedCategoryId }: ProductSectionProps) {
             <SnackCard
               key={product.id}
               product={product}
+              isFeatured={product.isFeatured}
               isWishlisted={product.unitPrices.some((u) => wishlistedIds.has(u.id))}
               onWishlistToggle={(unitPriceId) =>
                 handleWishlistToggle(product, unitPriceId || product.unitPrices[0]?.id)

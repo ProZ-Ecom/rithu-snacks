@@ -2,6 +2,7 @@ import { db } from "@/lib/db/prisma";
 import { ApiError } from "@/lib/api/api-error";
 import { userRepository } from "@/features/users/repositories/user.repository";
 import { offerService } from "@/features/offers/services/offer.service";
+import { couponService } from "@/features/coupons/services/coupon.service";
 import { orderRepository } from "../repositories/order.repository";
 import type {
   OrderDetailResponse,
@@ -223,18 +224,52 @@ export const orderService = {
 
 
 
-    // Free delivery is judged on what the customer actually pays, after offers.
+    // Free delivery is judged on what the customer actually pays, after offers & coupons.
     const isExpress = (input.deliveryMethod || "").toLowerCase() === "express";
-    const payableBeforeShipping = subtotal - offerDiscount;
+
+    // 4b. Evaluate Coupon Discount
+    let couponDiscount = 0;
+    let appliedCouponId: bigint | null = cart.coupon_id ?? null;
+
+    if (!appliedCouponId && input.couponCode) {
+      try {
+        const validated = await couponService.validateAndCalculateDiscount(
+          input.couponCode,
+          userId,
+          Math.max(0, subtotal - offerDiscount)
+        );
+        appliedCouponId = BigInt(validated.couponId);
+      } catch (err: any) {
+        throw ApiError.badRequest(err.message || "Invalid coupon code");
+      }
+    }
+
+    if (appliedCouponId) {
+      const validated = await couponService.validateCouponById(
+        appliedCouponId,
+        userId,
+        Math.max(0, subtotal - offerDiscount)
+      );
+      if (validated) {
+        couponDiscount = validated.discountAmount;
+      } else {
+        appliedCouponId = null;
+      }
+    }
+
+    const payableBeforeShipping = Math.max(0, subtotal - offerDiscount - couponDiscount);
     const shippingCharge = isExpress ? 99 : (payableBeforeShipping >= 499 ? 0 : 49);
     const totalAmount = payableBeforeShipping + shippingCharge;
+    const combinedTotalDiscount = offerDiscount + couponDiscount;
 
     // 5. Execute creation transaction
     return orderRepository.createCustomerOrderTransaction({
       userId,
       cartId: cart.id,
+      couponId: appliedCouponId,
+      couponDiscount,
       subtotal,
-      discountAmount: offerDiscount,
+      discountAmount: combinedTotalDiscount,
       shippingCharge,
       totalAmount,
       orderStatus,
@@ -771,7 +806,7 @@ export const orderService = {
   async getCheckoutSummary(
     userId: number | string | bigint,
     deliveryMethod?: string,
-    _couponCode?: string
+    couponCode?: string
   ) {
     const user = await userRepository.findById(String(userId));
     if (!user || !user.internalId) throw ApiError.unauthorized("User not found");
@@ -796,29 +831,68 @@ export const orderService = {
       }));
 
     const pricing = await offerService.priceCartItems(lines);
+
+    let couponDiscount = 0;
+    let couponInfo: { id: number; code: string; discount: number } | null = null;
+
+    if (cart?.coupon_id) {
+      const validated = await couponService.validateCouponById(
+        cart.coupon_id,
+        user.internalId,
+        pricing.total
+      );
+      if (validated) {
+        couponDiscount = validated.discountAmount;
+        couponInfo = {
+          id: validated.couponId,
+          code: validated.code,
+          discount: validated.discountAmount,
+        };
+      }
+    } else if (couponCode) {
+      try {
+        const validated = await couponService.validateAndCalculateDiscount(
+          couponCode,
+          user.internalId,
+          pricing.total
+        );
+        couponDiscount = validated.discountAmount;
+        couponInfo = {
+          id: validated.couponId,
+          code: validated.code,
+          discount: validated.discountAmount,
+        };
+      } catch {
+        // invalid code passed, ignore for summary preview
+      }
+    }
+
     const isExpress = (deliveryMethod || "").toLowerCase() === "express";
-    const payableBeforeShipping = pricing.total;
+    const payableBeforeShipping = Math.max(0, pricing.total - couponDiscount);
     const shippingCharge = isExpress ? 99 : (payableBeforeShipping >= 499 ? 0 : 49);
     const totalAmount = payableBeforeShipping + shippingCharge;
+    const combinedDiscount = pricing.totalDiscount + couponDiscount;
 
     return {
       subtotal: pricing.subtotal,
       deliveryCharge: shippingCharge,
       shippingCharge: shippingCharge,
-      discount: pricing.totalDiscount,
-      discountAmount: pricing.totalDiscount,
-      totalSavings: pricing.totalSavings,
+      discount: combinedDiscount,
+      discountAmount: combinedDiscount,
+      offerDiscount: pricing.totalDiscount,
+      couponDiscount,
+      totalSavings: pricing.totalSavings + couponDiscount,
       items: pricing.lines,
       total: totalAmount,
       totalAmount,
       totals: {
         subtotal: pricing.subtotal,
         shipping: shippingCharge,
-        discount: pricing.totalDiscount,
+        discount: combinedDiscount,
         total: totalAmount,
       },
-      coupon: _couponCode ? { code: _couponCode, discount: pricing.totalDiscount } : null,
-      couponCode: _couponCode || null,
+      coupon: couponInfo,
+      couponCode: couponInfo?.code || null,
     };
   },
 };

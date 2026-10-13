@@ -24,6 +24,7 @@ export interface CatalogFacets {
   vegCount: number;
   nonVegCount: number;
   veganCount?: number;
+  featuredCount?: number;
 }
 
 export interface PaginationMeta {

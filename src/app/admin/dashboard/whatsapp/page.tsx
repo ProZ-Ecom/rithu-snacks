@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { WhatsAppNavTabs } from "@/components/admin/whatsapp/WhatsAppNavTabs";
 import {
@@ -12,16 +12,19 @@ import {
   Send,
   LogOut,
   Smartphone,
+  Phone,
   ShieldCheck,
-  Zap,
-  Clock,
+  Check,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/Toast";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { WHATSAPP_TEMPLATES } from "@/lib/whatsapp/whatsapp-utils";
+import {
+  WHATSAPP_TEMPLATES,
+  validateWhatsAppPhone,
+} from "@/lib/whatsapp/whatsapp-utils";
 
 interface WhatsAppStatusData {
   status: "DISCONNECTED" | "PAIRING" | "CONNECTED";
@@ -48,10 +51,55 @@ export default function AdminWhatsAppPage() {
 
   // Message Sender State
   const [recipientPhone, setRecipientPhone] = useState("");
+  const [phoneError, setPhoneError] = useState<string | null>(null);
+  const [isPhoneTouched, setIsPhoneTouched] = useState(false);
   const [messageText, setMessageText] = useState("");
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
   const [sendResult, setSendResult] = useState<{ success: boolean; message: string } | null>(null);
+
+  // Live Phone Validation State
+  const phoneValidation = useMemo(() => {
+    if (!recipientPhone.trim()) return null;
+    return validateWhatsAppPhone(recipientPhone);
+  }, [recipientPhone]);
+
+  // Handle phone input change with sanitization and real-time validation
+  const handlePhoneChange = (val: string) => {
+    // Only permit digits, +, spaces, -, and parentheses
+    const sanitized = val.replace(/[^0-9+\s\-()]/g, "");
+    setRecipientPhone(sanitized);
+
+    if (sendResult) setSendResult(null);
+
+    if (isPhoneTouched || sanitized.length > 0) {
+      if (!sanitized.trim()) {
+        setPhoneError("Recipient phone number is required");
+      } else {
+        const validation = validateWhatsAppPhone(sanitized);
+        if (!validation.isValid) {
+          setPhoneError(validation.errorMessage);
+        } else {
+          setPhoneError(null);
+        }
+      }
+    }
+  };
+
+  // Handle blur to display validation error if touched
+  const handlePhoneBlur = () => {
+    setIsPhoneTouched(true);
+    if (!recipientPhone.trim()) {
+      setPhoneError("Recipient phone number is required");
+    } else {
+      const validation = validateWhatsAppPhone(recipientPhone);
+      if (!validation.isValid) {
+        setPhoneError(validation.errorMessage);
+      } else {
+        setPhoneError(null);
+      }
+    }
+  };
 
   // Fetch status
   const loadStatus = React.useCallback(async (showSpinner = false) => {
@@ -71,7 +119,6 @@ export default function AdminWhatsAppPage() {
 
   // Initial status fetch once on page mount
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadStatus(false);
   }, [loadStatus]);
 
@@ -149,17 +196,25 @@ export default function AdminWhatsAppPage() {
   // Send Message
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!recipientPhone.trim()) {
-      setSendResult({ success: false, message: "Please enter a valid recipient phone number." });
+    setIsPhoneTouched(true);
+
+    const validation = validateWhatsAppPhone(recipientPhone);
+    if (!validation.isValid) {
+      const errMsg = validation.errorMessage || "Please enter a valid 10-digit mobile number";
+      setPhoneError(errMsg);
+      toast.error("Invalid Phone Number", errMsg);
       return;
     }
+
     if (!messageText.trim()) {
       setSendResult({ success: false, message: "Please type a message to send." });
+      toast.error("Message Required", "Please enter message content before sending.");
       return;
     }
 
     setIsSending(true);
     setSendResult(null);
+    setPhoneError(null);
 
     try {
       const res = await fetch("/api/admin/whatsapp/send", {
@@ -173,10 +228,12 @@ export default function AdminWhatsAppPage() {
 
       const json = await res.json();
       if (json.success) {
+        const targetFormatted = validation.displayFormatted || recipientPhone;
         setSendResult({
           success: true,
-          message: `Message sent successfully to ${recipientPhone}!`,
+          message: `Message sent successfully to ${targetFormatted}!`,
         });
+        toast.success("Message Delivered", `Sent successfully to ${targetFormatted}`);
         setMessageText("");
         setSelectedTemplateId(null);
       } else {
@@ -184,6 +241,7 @@ export default function AdminWhatsAppPage() {
           success: false,
           message: json.message || "Failed to deliver message via WhatsApp.",
         });
+        toast.error("Delivery Failed", json.message || "Failed to send WhatsApp message.");
       }
     } catch (err: unknown) {
       setSendResult({
@@ -193,6 +251,16 @@ export default function AdminWhatsAppPage() {
     } finally {
       setIsSending(false);
     }
+  };
+
+  // Clear Form
+  const handleClearForm = () => {
+    setRecipientPhone("");
+    setPhoneError(null);
+    setIsPhoneTouched(false);
+    setMessageText("");
+    setSelectedTemplateId(null);
+    setSendResult(null);
   };
 
   return (
@@ -412,36 +480,6 @@ export default function AdminWhatsAppPage() {
               </div>
             )}
           </div>
-
-          {/* Card 2: Anti-Ban & Performance Highlights */}
-          {/* <div className="bg-white rounded-2xl border border-neutral-200/80 shadow-xs p-5 space-y-3">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-neutral-400">
-              Anti-Ban & Engine Safeguards
-            </h3>
-            <div className="space-y-2.5">
-              <div className="flex items-start gap-2.5 text-xs text-neutral-600">
-                <Zap className="h-4 w-4 text-amber-500 flex-shrink-0 mt-0.5" />
-                <span>
-                  <strong className="text-neutral-900 font-semibold">Zero Chat History Sync:</strong>{" "}
-                  Never downloads old personal messages, saving 80% RAM (~35MB total).
-                </span>
-              </div>
-              <div className="flex items-start gap-2.5 text-xs text-neutral-600">
-                <Clock className="h-4 w-4 text-blue-500 flex-shrink-0 mt-0.5" />
-                <span>
-                  <strong className="text-neutral-900 font-semibold">Human Typing Simulation:</strong>{" "}
-                  Adds 1.5s–2.5s jitter and active typing presence before sending.
-                </span>
-              </div>
-              <div className="flex items-start gap-2.5 text-xs text-neutral-600">
-                <ShieldCheck className="h-4 w-4 text-emerald-500 flex-shrink-0 mt-0.5" />
-                <span>
-                  <strong className="text-neutral-900 font-semibold">Next.js Singleton Lock:</strong>{" "}
-                  Prevents duplicate sockets from opening during hot reloads.
-                </span>
-              </div>
-            </div>
-          </div> */}
         </div>
 
         {/* Right Column: Message Sender & Templates */}
@@ -486,30 +524,56 @@ export default function AdminWhatsAppPage() {
 
             {/* Message Form */}
             <form onSubmit={handleSendMessage} className="space-y-4">
-              {/* Phone Input */}
+              {/* Phone Input with validation feedback */}
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-neutral-700">
-                  Recipient Phone Number:
-                </label>
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-neutral-700">
+                    Recipient Phone Number <span className="text-red-500">*</span>
+                  </label>
+                  {phoneValidation?.isValid && (
+                    <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-600">
+                      <Check className="h-3 w-3" /> Valid Number
+                    </span>
+                  )}
+                </div>
+
                 <div className="relative">
                   <Input
                     type="tel"
-                    placeholder="Enter recipient phone number"
+                    placeholder="e.g. 9876543210 or +91 98765 43210"
                     value={recipientPhone}
-                    onChange={(e) => setRecipientPhone(e.target.value)}
+                    onChange={(e) => handlePhoneChange(e.target.value)}
+                    onBlur={handlePhoneBlur}
+                    leftIcon={<Phone className="h-4 w-4 text-neutral-400" />}
+                    error={isPhoneTouched && phoneError ? phoneError : undefined}
                     className="font-mono text-sm h-11"
                   />
                 </div>
-                <p className="text-[11px] text-neutral-500">
-                  Indian 10-digit mobile numbers are automatically formatted with +91 country code.
-                </p>
+
+                {/* Preview Badge when valid */}
+                {phoneValidation?.isValid && (
+                  <div className="flex items-center gap-1.5 text-xs text-emerald-800 bg-emerald-50/80 border border-emerald-200/80 px-2.5 py-1.5 rounded-lg">
+                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                    <span>
+                      Formatted for WhatsApp:{" "}
+                      <strong className="font-mono font-semibold">{phoneValidation.displayFormatted}</strong>
+                    </span>
+                  </div>
+                )}
+
+                {/* Helper hint when no error */}
+                {(!isPhoneTouched || !phoneError) && !phoneValidation?.isValid && (
+                  <p className="text-[11px] text-neutral-500">
+                    Enter a 10-digit Indian mobile number (e.g. 9876543210) or international number with country code.
+                  </p>
+                )}
               </div>
 
               {/* Message Textarea */}
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-semibold text-neutral-700">
-                    Message Content:
+                    Message Content <span className="text-red-500">*</span>
                   </label>
                   <span className="text-[11px] text-neutral-400 font-mono">
                     {messageText.length} characters
@@ -551,12 +615,8 @@ export default function AdminWhatsAppPage() {
                   type="button"
                   variant="outline"
                   size="sm"
-                  onClick={() => {
-                    setMessageText("");
-                    setSelectedTemplateId(null);
-                    setSendResult(null);
-                  }}
-                  className="text-xs text-neutral-500"
+                  onClick={handleClearForm}
+                  className="text-xs text-neutral-500 cursor-pointer"
                 >
                   Clear
                 </Button>
@@ -565,8 +625,14 @@ export default function AdminWhatsAppPage() {
                   type="submit"
                   variant="primary"
                   size="md"
-                  disabled={isSending || data.status !== "CONNECTED"}
-                  className="gap-2 bg-secondary-600 hover:bg-secondary-700 text-white font-semibold text-xs min-w-[160px] shadow-xs"
+                  disabled={
+                    isSending ||
+                    data.status !== "CONNECTED" ||
+                    !recipientPhone.trim() ||
+                    !messageText.trim() ||
+                    Boolean(phoneError)
+                  }
+                  className="gap-2 bg-secondary-600 hover:bg-secondary-700 text-white font-semibold text-xs min-w-[160px] shadow-xs cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Send className={`h-3.5 w-3.5 ${isSending ? "animate-pulse" : ""}`} />
                   {isSending

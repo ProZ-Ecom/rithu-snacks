@@ -526,7 +526,7 @@ export function OrderDetailView({
                   discountAmount: Number(order.discountAmount || 0),
                   totalAmount: Number(order.totalAmount || 0),
                 }}
-                couponLabel={(order as any).couponCode}
+                couponLabel={order.couponCode}
               />
             </div>
           </div>
