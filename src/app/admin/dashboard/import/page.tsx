@@ -29,10 +29,15 @@ interface RejectedRow {
 
 interface PreviewItem {
   categoryName: string;
+  categoryCode?: string;
   productName: string;
+  productCode?: string;
   sku: string;
+  brand?: string;
   variants: {
     variantName: string;
+    variantCode?: string;
+    vegType?: string;
     unit: string;
     unitValue: number;
     variantSku: string;
@@ -463,10 +468,20 @@ export default function BulkImportPage() {
                             </p>
                             <p className="text-xs text-neutral-400">
                               SKU: <span className="font-mono font-semibold">{prod.sku}</span>
+                              {prod.productCode && (
+                                <>
+                                  {" • "}Code: <span className="font-mono font-semibold">{prod.productCode}</span>
+                                </>
+                              )}
                               {" • "}Category:{" "}
                               <span className="font-semibold text-emerald-600">
                                 {prod.categoryName}
                               </span>
+                              {prod.brand && (
+                                <>
+                                  {" • "}Brand: <span className="font-medium text-neutral-600">{prod.brand}</span>
+                                </>
+                              )}
                             </p>
                           </div>
                           <span className="shrink-0 px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-bold">
@@ -484,17 +499,41 @@ export default function BulkImportPage() {
                                     : "border-neutral-200 bg-neutral-50"
                                 }`}
                               >
-                                <p className="font-semibold text-neutral-700">
-                                  {v.variantName}{" "}
-                                  {v.isDefault && (
-                                    <span className="text-[10px] text-emerald-600 font-bold">
-                                      (default)
-                                    </span>
+                                <div className="flex items-center justify-between gap-1">
+                                  <p className="font-semibold text-neutral-700 truncate">
+                                    {v.variantName}
+                                  </p>
+                                  <div className="flex items-center gap-1 shrink-0">
+                                    {v.vegType && (
+                                      <span
+                                        className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase ${
+                                          v.vegType === "veg"
+                                            ? "bg-emerald-100 text-emerald-700"
+                                            : v.vegType === "nonveg"
+                                              ? "bg-rose-100 text-rose-700"
+                                              : v.vegType === "vegan"
+                                                ? "bg-green-100 text-green-700"
+                                                : "bg-neutral-100 text-neutral-600"
+                                        }`}
+                                      >
+                                        {v.vegType}
+                                      </span>
+                                    )}
+                                    {v.isDefault && (
+                                      <span className="text-[10px] text-emerald-600 font-bold">
+                                        (default)
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                                <p className="text-neutral-400 font-mono text-[11px] truncate">
+                                  {v.variantSku}
+                                  {v.variantCode && (
+                                    <span className="text-neutral-500 font-mono ml-1.5">[{v.variantCode}]</span>
                                   )}
                                 </p>
-                                <p className="text-neutral-400 font-mono">{v.variantSku}</p>
                                 <div className="flex gap-3 mt-1 text-neutral-600">
-                                  <span>₹{v.price}</span>
+                                  <span className="font-bold">₹{v.price}</span>
                                   <span>Stock: {v.stockQty}</span>
                                   <span>
                                     {v.unitValue} {v.unit}
