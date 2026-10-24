@@ -232,6 +232,7 @@ export default function ReviewDetailPage({ params }: ReviewDetailPageProps) {
                           src={imgUrl}
                           alt={`Review photo ${idx + 1}`}
                           fill
+                          sizes="(max-width: 640px) 50vw, (max-width: 1024px) 25vw, 160px"
                           className="object-cover transition-transform group-hover:scale-105"
                         />
                         <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity text-white">
@@ -261,6 +262,7 @@ export default function ReviewDetailPage({ params }: ReviewDetailPageProps) {
                       src={review.customer.avatar}
                       alt={review.customer.name || "Customer"}
                       fill
+                      sizes="48px"
                       className="object-cover"
                     />
                   ) : (
@@ -347,6 +349,7 @@ export default function ReviewDetailPage({ params }: ReviewDetailPageProps) {
               src={selectedImage}
               alt="Expanded review photo"
               fill
+              sizes="(max-width: 1024px) 100vw, 768px"
               className="object-contain"
             />
             <button

@@ -49,6 +49,18 @@ export interface CartResponse {
   /** Final items total after discounts (matches discounted subtotal). */
   total: number;
   totalItems: number;
+  /** Applied coupon details if active */
+  coupon?: {
+    id: number;
+    code: string;
+    type: "percentage" | "flat";
+    value: number;
+    discountAmount: number;
+    minOrderAmount: number;
+    maxDiscount: number | null;
+  } | null;
+  /** Direct discount given by the coupon */
+  couponDiscount?: number;
 }
 
 export type CartWithItems = CartResponse;
@@ -62,6 +74,8 @@ export interface CartSummaryData {
   subtotal: number;
   originalSubtotal?: number;
   discount: number;
+  couponDiscount?: number;
+  coupon?: CartResponse["coupon"];
   tax: number;
   shippingCharge: number;
   grandTotal: number;

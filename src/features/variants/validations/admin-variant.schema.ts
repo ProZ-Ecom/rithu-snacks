@@ -150,7 +150,7 @@ export type PriceHistoryChartQueryInput = z.infer<
 
 export const adminVariantsQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1).optional(),
-  pageSize: z.coerce.number().int().min(1).max(100).default(10).optional(),
+  pageSize: z.coerce.number().int().min(1).max(100000).default(10).optional(),
   search: z.string().trim().optional(),
   productId: z.string().trim().uuid("Invalid Product UUID format").optional(),
   productUuid: z.string().trim().uuid("Invalid Product UUID format").optional(),
@@ -166,9 +166,9 @@ export const adminVariantListSchema = z
       .number()
       .int()
       .min(1, "pageSize must be at least 1")
-      .max(100, "pageSize cannot exceed 100")
+      .max(100000, "pageSize cannot exceed 100000")
       .default(20),
-    limit: z.number().int().min(1).max(100).optional(),
+    limit: z.number().int().min(1).max(100000).optional(),
     search: z.string().trim().optional(),
     productId: z.string().uuid("Invalid Product UUID format").optional(),
     productIds: z
@@ -238,7 +238,7 @@ export const variantPriceHistoryQuerySchema = z
       .number()
       .int()
       .min(1, "pageSize must be at least 1")
-      .max(100, "pageSize cannot exceed 100")
+      .max(100000, "pageSize cannot exceed 100000")
       .default(20),
     fromDate: z
       .string()

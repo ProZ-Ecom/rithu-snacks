@@ -7,8 +7,13 @@ import {
   useUpdateHsnCode,
   useDeleteHsnCode,
 } from "@/features/hsn-codes/hooks";
+import { getHsnCodes } from "@/features/hsn-codes/api/get-hsn-codes";
 import { useGstRates } from "@/features/gst-rates/hooks/use-gst-rates";
 import { DataTable } from "@/components/admin/data-table/DataTable";
+import { BulkActionsBar } from "@/components/admin/data-table/BulkActionsBar";
+import { ExportExcelButton } from "@/components/admin/ExportExcelButton";
+import { exportToExcel } from "@/lib/excel-export";
+import { EXPORT_PRESETS } from "@/lib/export-presets";
 import {
   AdminPageHeader,
   AdminContent,
@@ -35,6 +40,15 @@ export default function AdminHsnCodesPage() {
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [selectedHsn, setSelectedHsn] =
     useState<AdminHsnCodeResponse | null>(null);
+
+  // Bulk Selection State
+  const [selectedRowIds, setSelectedRowIds] = useState<Record<string, boolean>>({});
+  const [selectedRows, setSelectedRows] = useState<AdminHsnCodeResponse[]>([]);
+
+  useEffect(() => {
+    setSelectedRowIds({});
+    setSelectedRows([]);
+  }, [search, page, pageSize]);
 
   const { data, isLoading, error, refetch } = useHsnCodes({
   page,
@@ -102,6 +116,8 @@ export default function AdminHsnCodesPage() {
           <Button
             variant="ghost"
             size="icon"
+            className="h-8 w-8 text-neutral-500 hover:text-secondary-700 hover:bg-secondary-50"
+            title="Edit HSN Code"
             onClick={() => {
               setSelectedHsn(row.original);
               setIsEditOpen(true);
@@ -113,6 +129,8 @@ export default function AdminHsnCodesPage() {
           <Button
             variant="ghost"
             size="icon"
+            className="h-8 w-8 text-neutral-400 hover:text-rose-600 hover:bg-rose-50"
+            title="Delete HSN Code"
             onClick={() => setDeleteId(row.original.id)}
           >
             <Trash2 className="h-4 w-4 text-[var(--color-error-600)]" />
@@ -155,16 +173,52 @@ export default function AdminHsnCodesPage() {
               className="w-full max-w-md"
             />
 
-            <Button
-              onClick={() => setIsCreateOpen(true)}
-              className="h-11 rounded-xl bg-[var(--color-secondary-600)] px-5 text-sm font-semibold text-white hover:bg-[var(--color-secondary-700)]"
-            >
-              <Plus className="mr-2 h-4 w-4" />
-              Add HSN Code
-            </Button>
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <ExportExcelButton
+                data={hsnCodes}
+                fetchData={async () => {
+                  const res = await getHsnCodes({
+                    page: 1,
+                    pageSize: 10000,
+                    search: search || undefined,
+                  });
+                  return res.data;
+                }}
+                totalCount={data?.meta?.total ?? hsnCodes.length}
+                filename="hsn_codes"
+                sheetName="HSN Codes"
+                columns={EXPORT_PRESETS.hsnCodes}
+              />
+
+              <Button
+                onClick={() => setIsCreateOpen(true)}
+                className="h-11 rounded-xl bg-[var(--color-secondary-600)] px-5 text-sm font-semibold text-white hover:bg-[var(--color-secondary-700)] shadow-xs"
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                Add HSN Code
+              </Button>
+            </div>
           </div>
 
           <div className="mt-6 flex-1 min-h-0 min-w-0 flex flex-col">
+            <BulkActionsBar
+              selectedCount={selectedRows.length}
+              entityName="HSN code"
+              filterNotice={search ? `Filtered by "${search}"` : undefined}
+              onClearSelection={() => {
+                setSelectedRowIds({});
+                setSelectedRows([]);
+              }}
+              onExport={() => {
+                exportToExcel({
+                  filename: "selected_hsn_codes",
+                  sheetName: "Selected HSN Codes",
+                  data: selectedRows,
+                  columns: EXPORT_PRESETS.hsnCodes,
+                });
+              }}
+            />
+
             <DataTable
               columns={columns}
               data={hsnCodes}
@@ -178,6 +232,12 @@ export default function AdminHsnCodesPage() {
                 setPageSize(newSize);
                 setPage(1);
               }}
+              selectedRowIds={selectedRowIds}
+              onRowSelectionChange={(newSelection, items) => {
+                setSelectedRowIds(newSelection);
+                setSelectedRows(items);
+              }}
+              getRowId={(row) => String(row.id)}
               className="bg-white"
             />
           </div>

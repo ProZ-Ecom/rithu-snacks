@@ -9,7 +9,7 @@ export const adminDeliveryOrdersListSchema = z
       .number()
       .int()
       .min(1, "limit must be at least 1")
-      .max(100, "limit cannot exceed 100")
+      .max(100000, "limit cannot exceed 100000")
       .default(10),
     search: z.string().trim().optional(),
     orderStatus: z
@@ -60,7 +60,7 @@ export const adminDeliveryStaffListSchema = z
       .number()
       .int()
       .min(1, "limit must be at least 1")
-      .max(100, "limit cannot exceed 100")
+      .max(100000, "limit cannot exceed 100000")
       .default(10),
     search: z.string().trim().optional(),
     isActive: z.boolean().optional().default(true),
@@ -94,9 +94,9 @@ export const staffDeliveryListSchema = z
       .number()
       .int()
       .min(1, "limit must be at least 1")
-      .max(100, "limit cannot exceed 100")
+      .max(100000, "limit cannot exceed 100000")
       .default(10),
-    pageSize: z.number().int().min(1).max(100).optional(),
+    pageSize: z.number().int().min(1).max(100000).optional(),
     search: z.string().trim().optional(),
     status: z
       .enum([

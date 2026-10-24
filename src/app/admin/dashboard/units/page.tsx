@@ -7,8 +7,13 @@ import {
   useUpdateUnit,
   useDeleteUnit,
 } from "@/features/units/hooks";
+import { getUnits } from "@/features/units/api/get-units";
 
 import { DataTable } from "@/components/admin/data-table/DataTable";
+import { BulkActionsBar } from "@/components/admin/data-table/BulkActionsBar";
+import { ExportExcelButton } from "@/components/admin/ExportExcelButton";
+import { exportToExcel } from "@/lib/excel-export";
+import { EXPORT_PRESETS } from "@/lib/export-presets";
 import {
   AdminPageHeader,
   AdminContent,
@@ -37,6 +42,15 @@ export default function AdminUnitsPage() {
 
   const [selectedUnit, setSelectedUnit] =
     useState<AdminUnitResponse | null>(null);
+
+  // Bulk Selection State
+  const [selectedRowIds, setSelectedRowIds] = useState<Record<string, boolean>>({});
+  const [selectedRows, setSelectedRows] = useState<AdminUnitResponse[]>([]);
+
+  useEffect(() => {
+    setSelectedRowIds({});
+    setSelectedRows([]);
+  }, [search, page, pageSize]);
 
   const { data, isLoading, error, refetch } = useUnits({
       page,
@@ -133,6 +147,8 @@ export default function AdminUnitsPage() {
           <Button
             variant="ghost"
             size="icon"
+            className="h-8 w-8 text-neutral-500 hover:text-secondary-700 hover:bg-secondary-50"
+            title="Edit Unit"
             onClick={() => {
               setSelectedUnit(row.original);
               setIsEditOpen(true);
@@ -144,6 +160,8 @@ export default function AdminUnitsPage() {
           <Button
             variant="ghost"
             size="icon"
+            className="h-8 w-8 text-neutral-400 hover:text-rose-600 hover:bg-rose-50"
+            title="Delete Unit"
             onClick={() => setDeleteId(row.original.id)}
           >
             <Trash2 className="h-4 w-4 text-[var(--color-error-600)]" />
@@ -186,16 +204,52 @@ export default function AdminUnitsPage() {
               className="w-full max-w-md"
             />
 
-            <Button
-              onClick={() => setIsCreateOpen(true)}
-              className="h-11 rounded-xl bg-[var(--color-secondary-600)] px-5 text-sm font-semibold text-white hover:bg-[var(--color-secondary-700)]"
-            >
-              <Plus className="mr-2 h-4 w-4" />
-              Add Unit
-            </Button>
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <ExportExcelButton
+                data={units}
+                fetchData={async () => {
+                  const res = await getUnits({
+                    page: 1,
+                    pageSize: 10000,
+                    search: search || undefined,
+                  });
+                  return res.data;
+                }}
+                totalCount={data?.meta?.total ?? units.length}
+                filename="units"
+                sheetName="Units"
+                columns={EXPORT_PRESETS.units}
+              />
+
+              <Button
+                onClick={() => setIsCreateOpen(true)}
+                className="h-11 rounded-xl bg-[var(--color-secondary-600)] px-5 text-sm font-semibold text-white hover:bg-[var(--color-secondary-700)] shadow-xs"
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                Add Unit
+              </Button>
+            </div>
           </div>
 
           <div className="mt-6 flex-1 min-h-0 min-w-0 flex flex-col">
+            <BulkActionsBar
+              selectedCount={selectedRows.length}
+              entityName="unit"
+              filterNotice={search ? `Filtered by "${search}"` : undefined}
+              onClearSelection={() => {
+                setSelectedRowIds({});
+                setSelectedRows([]);
+              }}
+              onExport={() => {
+                exportToExcel({
+                  filename: "selected_units",
+                  sheetName: "Selected Units",
+                  data: selectedRows,
+                  columns: EXPORT_PRESETS.units,
+                });
+              }}
+            />
+
             <DataTable
               columns={columns}
               data={units}
@@ -209,6 +263,12 @@ export default function AdminUnitsPage() {
                 setPageSize(newSize);
                 setPage(1);
               }}
+              selectedRowIds={selectedRowIds}
+              onRowSelectionChange={(newSelection, items) => {
+                setSelectedRowIds(newSelection);
+                setSelectedRows(items);
+              }}
+              getRowId={(row) => String(row.id)}
               className="bg-white"
             />
           </div>

@@ -1,4 +1,4 @@
-export type TimePeriod = "today" | "this_week" | "this_month" | "last_month" | "custom";
+export type TimePeriod = "today" | "this_week" | "this_month" | "last_month" | "this_year" | "custom";
 
 export type ViewState = "live" | "skeleton" | "empty" | "error";
 
@@ -27,8 +27,10 @@ export interface DashboardStats {
 export interface OverviewMetrics {
   averageOrderValue: number;
   aovComparisonText: string;
+  aovTrend?: "up" | "down" | "neutral";
   grossMarginPercent: number;
   grossMarginLabel: string;
+  grossMarginTrend?: "up" | "down" | "neutral";
   returnRtoRatePercent: number;
   returnRtoComparisonText: string;
 }

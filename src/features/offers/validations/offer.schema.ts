@@ -95,7 +95,7 @@ const dateString = z
 
 export const getOffersQuerySchema = z.object({
   page: z.coerce.number().int().positive().default(1),
-  limit: z.coerce.number().int().positive().max(100).default(10),
+  limit: z.coerce.number().int().positive().max(100000).default(10),
   search: z.string().trim().optional(),
   level: z.enum(OFFER_LEVELS).optional(),
   type: z.enum(OFFER_TYPES).optional(),

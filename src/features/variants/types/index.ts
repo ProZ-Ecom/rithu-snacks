@@ -17,6 +17,11 @@ export interface CustomerGlobalVariantListParams {
   categoryIds?: string[];
   minPrice?: number | null;
   maxPrice?: number | null;
+  inStock?: boolean;
+  isFeatured?: boolean;
+  vegType?: "veg" | "non_veg" | "nonveg" | "vegan" | "na";
+  /** Skip the facet counts (only the filter sidebar needs them). */
+  skipFacets?: boolean;
   sortBy?:
     | "variantName"
     | "salePrice"

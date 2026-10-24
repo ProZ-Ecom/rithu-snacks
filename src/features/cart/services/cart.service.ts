@@ -3,6 +3,7 @@ import { ApiError } from "@/lib/api/api-error";
 import { userRepository } from "@/features/users/repositories/user.repository";
 import { formatVariantMeasurement } from "@/features/variants/utils/measurement.util";
 import { offerService } from "@/features/offers/services/offer.service";
+import { couponService } from "@/features/coupons/services/coupon.service";
 import { cartRepository } from "../repositories/cart.repository";
 import type {
   AddCartItemInput,
@@ -124,15 +125,47 @@ async function formatCartResponse(
     };
   });
 
+  let couponSummary: CartResponse["coupon"] = null;
+  let couponDiscount = 0;
+
+  if (cart.coupon_id && cart.userId) {
+    const validated = await couponService.validateCouponById(
+      cart.coupon_id,
+      cart.userId,
+      pricing.total
+    );
+
+    if (validated) {
+      couponDiscount = validated.discountAmount;
+      couponSummary = {
+        id: validated.couponId,
+        code: validated.code,
+        type: validated.type,
+        value: validated.value,
+        discountAmount: validated.discountAmount,
+        minOrderAmount: validated.minOrderAmount,
+        maxDiscount: validated.maxDiscount,
+      };
+    } else {
+      // If no longer valid (e.g. cart subtotal dropped below min requirement),
+      // cleanly detach the coupon in DB
+      await cartRepository.removeCouponFromCart(cart.id);
+    }
+  }
+
+  const finalTotal = Math.max(0, pricing.total - couponDiscount);
+
   return {
     id: cart.uuid || String(cart.id),
     items,
     subtotal: pricing.total,
     originalSubtotal: pricing.subtotal,
     totalDiscount: pricing.totalDiscount,
-    totalSavings: pricing.totalSavings,
-    total: pricing.total,
+    totalSavings: pricing.totalSavings + couponDiscount,
+    total: finalTotal,
     totalItems,
+    coupon: couponSummary,
+    couponDiscount,
   };
 }
 
@@ -382,5 +415,51 @@ export const cartService = {
   async getCartCount(sessionUserId: string): Promise<CartCountResponse> {
     const userId = await resolveInternalUserId(sessionUserId);
     return cartRepository.getCartItemCount(userId);
+  },
+
+  async applyCoupon(sessionUserId: string, code: string): Promise<CartResponse> {
+    const userId = await resolveInternalUserId(sessionUserId);
+    const cart = await cartRepository.findActiveCartByUserId(userId);
+    if (!cart || cart.items.length === 0) {
+      throw ApiError.badRequest("Your cart is empty. Add snacks before applying a coupon.");
+    }
+
+    const lines = cart.items
+      .filter((it) => it.variant_unit_price && it.product && it.is_active)
+      .map((it) => ({
+        itemId: it.variant_unit_price!.uuid,
+        quantity: it.quantity,
+        unitPrice: calculateVariantPrice(it.variant_unit_price),
+      }));
+
+    if (lines.length === 0) {
+      throw ApiError.badRequest("No available items in cart to apply coupon.");
+    }
+
+    const pricing = await offerService.priceCartItems(lines);
+
+    const couponResult = await couponService.validateAndCalculateDiscount(
+      code,
+      userId,
+      pricing.total
+    );
+
+    const updatedCart = await cartRepository.applyCouponToCart(
+      cart.id,
+      BigInt(couponResult.couponId)
+    );
+
+    return formatCartResponse(updatedCart);
+  },
+
+  async removeCoupon(sessionUserId: string): Promise<CartResponse> {
+    const userId = await resolveInternalUserId(sessionUserId);
+    const cart = await cartRepository.findActiveCartByUserId(userId);
+    if (!cart) {
+      throw ApiError.notFound("Active cart not found");
+    }
+
+    const updatedCart = await cartRepository.removeCouponFromCart(cart.id);
+    return formatCartResponse(updatedCart);
   },
 };

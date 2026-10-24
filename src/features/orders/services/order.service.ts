@@ -2,6 +2,8 @@ import { db } from "@/lib/db/prisma";
 import { ApiError } from "@/lib/api/api-error";
 import { userRepository } from "@/features/users/repositories/user.repository";
 import { offerService } from "@/features/offers/services/offer.service";
+import { couponService } from "@/features/coupons/services/coupon.service";
+import { invoiceService } from "@/features/invoice/services/invoice.service";
 import { orderRepository } from "../repositories/order.repository";
 import type {
   OrderDetailResponse,
@@ -18,8 +20,10 @@ import type {
   CancelOrderInput,
   ReturnOrderInput,
   OrderStatusTransitionInput,
+  ShipOrderCourierInput,
 } from "../validations/order.schema";
 import type { orders_order_status } from "@/generated/prisma";
+import crypto from "crypto";
 
 export const orderService = {
   async createCustomerOrder(
@@ -221,17 +225,52 @@ export const orderService = {
 
 
 
-    // Free delivery is judged on what the customer actually pays, after offers.
-    const payableBeforeShipping = subtotal - offerDiscount;
-    const shippingCharge = payableBeforeShipping >= 499 ? 0 : 49;
+    // Free delivery is judged on what the customer actually pays, after offers & coupons.
+    const isExpress = (input.deliveryMethod || "").toLowerCase() === "express";
+
+    // 4b. Evaluate Coupon Discount
+    let couponDiscount = 0;
+    let appliedCouponId: bigint | null = cart.coupon_id ?? null;
+
+    if (!appliedCouponId && input.couponCode) {
+      try {
+        const validated = await couponService.validateAndCalculateDiscount(
+          input.couponCode,
+          userId,
+          Math.max(0, subtotal - offerDiscount)
+        );
+        appliedCouponId = BigInt(validated.couponId);
+      } catch (err: any) {
+        throw ApiError.badRequest(err.message || "Invalid coupon code");
+      }
+    }
+
+    if (appliedCouponId) {
+      const validated = await couponService.validateCouponById(
+        appliedCouponId,
+        userId,
+        Math.max(0, subtotal - offerDiscount)
+      );
+      if (validated) {
+        couponDiscount = validated.discountAmount;
+      } else {
+        appliedCouponId = null;
+      }
+    }
+
+    const payableBeforeShipping = Math.max(0, subtotal - offerDiscount - couponDiscount);
+    const shippingCharge = isExpress ? 99 : (payableBeforeShipping >= 499 ? 0 : 49);
     const totalAmount = payableBeforeShipping + shippingCharge;
+    const combinedTotalDiscount = offerDiscount + couponDiscount;
 
     // 5. Execute creation transaction
     return orderRepository.createCustomerOrderTransaction({
       userId,
       cartId: cart.id,
+      couponId: appliedCouponId,
+      couponDiscount,
       subtotal,
-      discountAmount: offerDiscount,
+      discountAmount: combinedTotalDiscount,
       shippingCharge,
       totalAmount,
       orderStatus,
@@ -584,6 +623,139 @@ export const orderService = {
     };
   },
 
+  async shipOrderWithCourier(
+    adminSessionUserId: string,
+    uuid: string,
+    input: ShipOrderCourierInput
+  ): Promise<OrderDetailResponse> {
+    const adminUser = await userRepository.findById(adminSessionUserId);
+    const adminId = adminUser?.internalId ?? null;
+
+    const isNumeric = /^\d+$/.test(uuid);
+    const order = await db.order.findFirst({
+      where: {
+        is_active: true,
+        OR: [
+          { uuid },
+          { orderNumber: uuid },
+          ...(isNumeric ? [{ id: BigInt(uuid) }] : []),
+        ],
+      },
+    });
+
+    if (!order) {
+      throw ApiError.notFound("Order not found");
+    }
+
+    if (["cancelled", "delivered", "returned"].includes(order.order_status)) {
+      throw ApiError.badRequest(
+        `Cannot ship order with status '${order.order_status}'`
+      );
+    }
+
+    // Resolve delivery partner
+    const isPartnerNumeric =
+      typeof input.deliveryPartnerId === "number" ||
+      /^\d+$/.test(String(input.deliveryPartnerId));
+
+    const partner = await db.delivery_partners.findFirst({
+      where: {
+        is_active: true,
+        OR: [
+          ...(isPartnerNumeric
+            ? [{ id: BigInt(input.deliveryPartnerId) }]
+            : []),
+          { code: String(input.deliveryPartnerId) },
+        ],
+      },
+    });
+
+    if (!partner) {
+      throw ApiError.notFound("Delivery partner not found or is inactive");
+    }
+
+    const trackingNum = input.trackingNumber.trim();
+    const cleanNotes = input.notes?.trim() || null;
+
+    await db.$transaction(async (tx) => {
+      // The invoice is issued when the goods leave, so it is numbered here.
+      await invoiceService.assignInvoiceNumber(tx, order, input.invoiceNumber);
+
+      // Find active shipment for this order
+      const existingShipment = await tx.shipments.findFirst({
+        where: {
+          order_id: order.id,
+          is_active: true,
+        },
+        orderBy: { id: "desc" },
+      });
+
+      if (existingShipment) {
+        await tx.shipments.update({
+          where: { id: existingShipment.id },
+          data: {
+            delivery_partner_id: partner.id,
+            tracking_number: trackingNum,
+            status: "in_transit",
+            assignment_status: "assigned",
+            shipped_at: new Date(),
+            delivery_notes: cleanNotes || existingShipment.delivery_notes,
+            updated_by: adminId,
+            updated_at: new Date(),
+          },
+        });
+      } else {
+        await tx.shipments.create({
+          data: {
+            uuid: crypto.randomUUID(),
+            order_id: order.id,
+            delivery_partner_id: partner.id,
+            tracking_number: trackingNum,
+            status: "in_transit",
+            assignment_status: "assigned",
+            shipped_at: new Date(),
+            delivery_notes: cleanNotes,
+            created_by: adminId,
+            updated_by: adminId,
+          },
+        });
+      }
+
+      // Update order status to 'shipped'
+      await tx.order.update({
+        where: { id: order.id },
+        data: {
+          order_status: "shipped",
+          updated_by: adminId,
+          updatedAt: new Date(),
+        },
+      });
+
+      // Add status history
+      const historyNote = cleanNotes
+        ? `Shipped via ${partner.name} (AWB: ${trackingNum}) - ${cleanNotes}`
+        : `Shipped via ${partner.name} (AWB: ${trackingNum})`;
+
+      await tx.order_status_history.create({
+        data: {
+          order_id: order.id,
+          status: "shipped",
+          note: historyNote,
+          created_by: adminId,
+        },
+      });
+    });
+
+    const updated = await orderRepository.findCustomerOrderByUuid(
+      order.userId,
+      order.uuid || String(order.id)
+    );
+    if (!updated) {
+      throw ApiError.internal("Failed to retrieve updated order");
+    }
+    return updated;
+  },
+
   async cancelOrder(
     userId: number | string | bigint,
     orderIdOrUuid: string | number,
@@ -628,6 +800,7 @@ export const orderService = {
     return this.createCustomerOrder(String(userId), {
       shippingAddressId: input.shippingAddressId || String(input.addressId),
       billingAddressId: input.billingAddressId,
+      deliveryMethod: input.deliveryMethod || "standard",
       notes: input.notes,
       paymentMethod: input.paymentMethod || "CARD",
       paymentDetails: input.paymentDetails,
@@ -637,7 +810,7 @@ export const orderService = {
   async getCheckoutSummary(
     userId: number | string | bigint,
     deliveryMethod?: string,
-    _couponCode?: string
+    couponCode?: string
   ) {
     const user = await userRepository.findById(String(userId));
     if (!user || !user.internalId) throw ApiError.unauthorized("User not found");
@@ -662,27 +835,68 @@ export const orderService = {
       }));
 
     const pricing = await offerService.priceCartItems(lines);
-    const deliveryCharge = deliveryMethod === "EXPRESS" || deliveryMethod === "express" ? 100 : 0;
-    const totalAmount = pricing.total + deliveryCharge;
+
+    let couponDiscount = 0;
+    let couponInfo: { id: number; code: string; discount: number } | null = null;
+
+    if (cart?.coupon_id) {
+      const validated = await couponService.validateCouponById(
+        cart.coupon_id,
+        user.internalId,
+        pricing.total
+      );
+      if (validated) {
+        couponDiscount = validated.discountAmount;
+        couponInfo = {
+          id: validated.couponId,
+          code: validated.code,
+          discount: validated.discountAmount,
+        };
+      }
+    } else if (couponCode) {
+      try {
+        const validated = await couponService.validateAndCalculateDiscount(
+          couponCode,
+          user.internalId,
+          pricing.total
+        );
+        couponDiscount = validated.discountAmount;
+        couponInfo = {
+          id: validated.couponId,
+          code: validated.code,
+          discount: validated.discountAmount,
+        };
+      } catch {
+        // invalid code passed, ignore for summary preview
+      }
+    }
+
+    const isExpress = (deliveryMethod || "").toLowerCase() === "express";
+    const payableBeforeShipping = Math.max(0, pricing.total - couponDiscount);
+    const shippingCharge = isExpress ? 99 : (payableBeforeShipping >= 499 ? 0 : 49);
+    const totalAmount = payableBeforeShipping + shippingCharge;
+    const combinedDiscount = pricing.totalDiscount + couponDiscount;
 
     return {
       subtotal: pricing.subtotal,
-      deliveryCharge,
-      shippingCharge: deliveryCharge,
-      discount: pricing.totalDiscount,
-      discountAmount: pricing.totalDiscount,
-      totalSavings: pricing.totalSavings,
+      deliveryCharge: shippingCharge,
+      shippingCharge: shippingCharge,
+      discount: combinedDiscount,
+      discountAmount: combinedDiscount,
+      offerDiscount: pricing.totalDiscount,
+      couponDiscount,
+      totalSavings: pricing.totalSavings + couponDiscount,
       items: pricing.lines,
       total: totalAmount,
       totalAmount,
       totals: {
         subtotal: pricing.subtotal,
-        shipping: deliveryCharge,
-        discount: pricing.totalDiscount,
+        shipping: shippingCharge,
+        discount: combinedDiscount,
         total: totalAmount,
       },
-      coupon: _couponCode ? { code: _couponCode, discount: pricing.totalDiscount } : null,
-      couponCode: _couponCode || null,
+      coupon: couponInfo,
+      couponCode: couponInfo?.code || null,
     };
   },
 };

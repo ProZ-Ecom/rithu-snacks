@@ -3,7 +3,12 @@
 import { useState, useEffect } from "react";
 import Image from "next/image";
 import { useBrands, useCreateBrand, useUpdateBrand, useDeleteBrand } from "@/features/brands/hooks";
+import { getBrands } from "@/features/brands/api/get-brands";
 import { DataTable } from "@/components/admin/data-table/DataTable";
+import { BulkActionsBar } from "@/components/admin/data-table/BulkActionsBar";
+import { ExportExcelButton } from "@/components/admin/ExportExcelButton";
+import { exportToExcel } from "@/lib/excel-export";
+import { EXPORT_PRESETS } from "@/lib/export-presets";
 import { AdminPageHeader, AdminContent } from "@/components/admin/AdminPageHeader";
 // import { AdminBreadcrumb } from "@/components/admin/AdminBreadcrumb";
 import { AdminTableSkeleton } from "@/components/admin/AdminTableSkeleton";
@@ -28,6 +33,15 @@ export default function AdminBrandsPage() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [selectedBrand, setSelectedBrand] = useState<BrandListItem | null>(null);
+
+  // Bulk Selection State
+  const [selectedRowIds, setSelectedRowIds] = useState<Record<string, boolean>>({});
+  const [selectedRows, setSelectedRows] = useState<BrandListItem[]>([]);
+
+  useEffect(() => {
+    setSelectedRowIds({});
+    setSelectedRows([]);
+  }, [search, page, pageSize]);
 
   const { data, isLoading, error, refetch } = useBrands({
     page,
@@ -119,6 +133,8 @@ export default function AdminBrandsPage() {
         <Button
           variant="ghost"
           size="icon"
+          className="h-8 w-8 text-neutral-500 hover:text-secondary-700 hover:bg-secondary-50"
+          title="Edit Brand"
           onClick={() => {
             setSelectedBrand(row.original);
             setIsEditOpen(true);
@@ -130,6 +146,8 @@ export default function AdminBrandsPage() {
         <Button
           variant="ghost"
           size="icon"
+          className="h-8 w-8 text-neutral-400 hover:text-rose-600 hover:bg-rose-50"
+          title="Delete Brand"
           onClick={() => setDeleteId(row.original.uuid)}
         >
           <Trash2 className="h-4 w-4 text-[var(--color-error-600)]" />
@@ -167,17 +185,53 @@ export default function AdminBrandsPage() {
               className="w-full max-w-md"
             />
 
-            <Button
-              onClick={() => setIsCreateOpen(true)}
-              className="h-11 rounded-xl bg-[var(--color-secondary-600)] px-5 text-sm font-semibold text-white hover:bg-[var(--color-secondary-700)]"
-            >
-              <Plus className="mr-2 h-4 w-4" />
-              Add Brand
-            </Button>
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <ExportExcelButton
+                data={brands}
+                fetchData={async () => {
+                  const res = await getBrands({
+                    page: 1,
+                    limit: 10000,
+                    search: search || undefined,
+                  });
+                  return res.data;
+                }}
+                totalCount={data?.meta?.total ?? brands.length}
+                filename="brands"
+                sheetName="Brands"
+                columns={EXPORT_PRESETS.brands}
+              />
+
+              <Button
+                onClick={() => setIsCreateOpen(true)}
+                className="h-11 rounded-xl bg-[var(--color-secondary-600)] px-5 text-sm font-semibold text-white hover:bg-[var(--color-secondary-700)] shadow-xs"
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                Add Brand
+              </Button>
+            </div>
           </div>
 
           {/* Table */}
           <div className="mt-4 sm:mt-6 flex-1 min-h-0 min-w-0 flex flex-col">
+            <BulkActionsBar
+              selectedCount={selectedRows.length}
+              entityName="brand"
+              filterNotice={search ? `Filtered by "${search}"` : undefined}
+              onClearSelection={() => {
+                setSelectedRowIds({});
+                setSelectedRows([]);
+              }}
+              onExport={() => {
+                exportToExcel({
+                  filename: "selected_brands",
+                  sheetName: "Selected Brands",
+                  data: selectedRows,
+                  columns: EXPORT_PRESETS.brands,
+                });
+              }}
+            />
+
             <DataTable
               columns={columns}
               data={brands}
@@ -191,6 +245,12 @@ export default function AdminBrandsPage() {
                 setPageSize(newSize);
                 setPage(1);
               }}
+              selectedRowIds={selectedRowIds}
+              onRowSelectionChange={(newSelection, items) => {
+                setSelectedRowIds(newSelection);
+                setSelectedRows(items);
+              }}
+              getRowId={(row) => String(row.id || row.uuid)}
               className="bg-white"
             />
           </div>

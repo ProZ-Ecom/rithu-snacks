@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { ColumnDef } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,10 @@ import {
   AdminContent,
 } from "@/components/admin/AdminPageHeader";
 import { DataTable } from "@/components/admin/data-table/DataTable";
+import { BulkActionsBar } from "@/components/admin/data-table/BulkActionsBar";
+import { ExportExcelButton } from "@/components/admin/ExportExcelButton";
+import { exportToExcel } from "@/lib/excel-export";
+import { EXPORT_PRESETS } from "@/lib/export-presets";
 import { SearchInput } from "@/components/ui/search-input";
 import { Select } from "@/components/ui/select";
 import { toast } from "@/components/ui/Toast";
@@ -23,6 +27,7 @@ import {
   useInventory,
   useAdjustStock,
   useCreateInventory,
+  getInventory,
 } from "@/features/inventory/hooks";
 import type {
   InventoryListItem,
@@ -96,6 +101,15 @@ export default function InventoryStockPage() {
   const [adjustOpen, setAdjustOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
 
+  // Bulk Selection State
+  const [selectedRowIds, setSelectedRowIds] = useState<Record<string, boolean>>({});
+  const [selectedRows, setSelectedRows] = useState<InventoryListItem[]>([]);
+
+  useEffect(() => {
+    setSelectedRowIds({});
+    setSelectedRows([]);
+  }, [search, page, pageSize]);
+
   const { data, isLoading, error, refetch } = useInventory({
     page,
     limit: pageSize,
@@ -123,11 +137,11 @@ export default function InventoryStockPage() {
     },
   });
 
-  const inventoryData = data?.data?.data ?? [];
+  const inventoryData: InventoryListItem[] = data?.data?.data ?? [];
 
   const inventoryOptions = useMemo(
     () =>
-      (inventoryData ?? []).map((item) => ({
+      inventoryData.map((item) => ({
         value: String(item.id),
         label: `${item.productName}${item.variantName ? ` - ${item.variantName}` : ""}`,
       })),
@@ -279,18 +293,54 @@ export default function InventoryStockPage() {
               className="w-full max-w-md"
             />
 
-            <Button
-              type="button"
-              onClick={() => setCreateOpen(true)}
-              className="h-11 rounded-xl bg-[var(--color-secondary-600)] px-5 text-sm font-semibold text-white hover:bg-[var(--color-secondary-700)] cursor-pointer"
-            >
-              <Plus className="mr-2 h-4 w-4" />
-              Add Inventory
-            </Button>
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <ExportExcelButton
+                data={filteredData}
+                fetchData={async () => {
+                  const res = await getInventory({
+                    page: 1,
+                    limit: 10000,
+                    search: search.trim() || undefined,
+                  });
+                  return res?.data?.data ?? [];
+                }}
+                totalCount={data?.data?.meta?.total ?? filteredData.length}
+                filename="inventory_stock"
+                sheetName="Inventory Stock"
+                columns={EXPORT_PRESETS.inventoryStock}
+              />
+
+              <Button
+                type="button"
+                onClick={() => setCreateOpen(true)}
+                className="h-11 rounded-xl bg-[var(--color-secondary-600)] px-5 text-sm font-semibold text-white hover:bg-[var(--color-secondary-700)] cursor-pointer shadow-xs"
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                Add Inventory
+              </Button>
+            </div>
           </div>
 
           {/* Table Container */}
           <div className="mt-6 flex-1 min-h-0 min-w-0 flex flex-col">
+            <BulkActionsBar
+              selectedCount={selectedRows.length}
+              entityName="inventory item"
+              filterNotice={search ? `Filtered by "${search}"` : undefined}
+              onClearSelection={() => {
+                setSelectedRowIds({});
+                setSelectedRows([]);
+              }}
+              onExport={() => {
+                exportToExcel({
+                  filename: "selected_inventory_stock",
+                  sheetName: "Selected Inventory Stock",
+                  data: selectedRows,
+                  columns: EXPORT_PRESETS.inventoryStock,
+                });
+              }}
+            />
+
             <DataTable
               columns={columns}
               data={filteredData}
@@ -304,6 +354,12 @@ export default function InventoryStockPage() {
                 setPageSize(newSize);
                 setPage(1);
               }}
+              selectedRowIds={selectedRowIds}
+              onRowSelectionChange={(newSelection, items) => {
+                setSelectedRowIds(newSelection);
+                setSelectedRows(items);
+              }}
+              getRowId={(row) => String(row.id)}
               emptyMessage={
                 search
                   ? "No inventory items match your search."

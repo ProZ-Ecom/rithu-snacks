@@ -2,7 +2,6 @@
 
 import { useState, Suspense } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
 import { FormProvider, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -20,9 +19,10 @@ import { loginSchema, type LoginInput } from "@/lib/validations/auth";
 import { useLogin } from "@/features/auth";
 
 function AdminLoginForm() {
-  const router = useRouter();
   const [rememberMe, setRememberMe] = useState(false);
   const loginMutation = useLogin();
+  const [isRedirecting, setIsRedirecting] = useState(false);
+  const isSubmitting = loginMutation.isPending || isRedirecting;
 
   const methods = useForm<LoginInput>({
     resolver: zodResolver(loginSchema),
@@ -51,6 +51,7 @@ function AdminLoginForm() {
             return;
           }
 
+          setIsRedirecting(true);
           try {
             await signIn("credentials", {
               email: data.email.trim(),
@@ -61,10 +62,11 @@ function AdminLoginForm() {
             // Cookie auth is primary
           }
 
-          router.push("/admin/dashboard");
-          router.refresh();
+          // Hard navigation so the new session is picked up; loader stays on until the page unloads
+          window.location.assign("/admin/dashboard");
         },
         onError: (err: any) => {
+          setIsRedirecting(false);
           methods.setError("root", {
             type: "server",
             message:
@@ -133,10 +135,10 @@ function AdminLoginForm() {
 
           <FormSubmitButton
             size="xl"
-            disabled={loginMutation.isPending}
+            disabled={isSubmitting}
             className="mt-2 h-10 w-full rounded-lg bg-secondary-600 text-sm text-white transition-all hover:bg-secondary-700 cursor-pointer disabled:opacity-50"
           >
-            {loginMutation.isPending ? (
+            {isSubmitting ? (
               <Spinner size="sm" className="text-white" />
             ) : (
               "Sign In to Admin"

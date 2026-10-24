@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "cross-env NODE_OPTIONS=\"--max-old-space-size=4096\" next dev --webpack",
+    "dev:turbo": "cross-env NODE_OPTIONS=\"--max-old-space-size=4096\" next dev",
     "build": "cross-env NODE_OPTIONS=\"--max-old-space-size=4096\" next build --webpack",
     "start": "next start",
     "lint": "eslint",
@@ -13,6 +14,7 @@
     "db:sync": "node scripts/db-sync.cjs",
     "db:migrate": "node scripts/db-sync.cjs",
     "db:seed": "node --experimental-strip-types prisma/seed.ts",
+    "seed:orders": "node --experimental-strip-types scripts/seed-last-month-orders.ts",
     "db:studio": "prisma studio"
   },
   "dependencies": {
@@ -47,6 +49,7 @@
     "react-easy-crop": "^6.2.3",
     "react-hook-form": "^7.84.0",
     "tailwind-merge": "^3.6.0",
+    "xlsx": "^0.18.5",
     "zod": "^4.4.3"
   },
   "devDependencies": {

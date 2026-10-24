@@ -32,7 +32,7 @@ function resolveCategoryImage(category: CustomerCategoryDto): string {
 export function CategorySection() {
   const { data: response, isLoading } = useCustomerCategories({
     page: 1,
-    pageSize: 20,
+    pageSize: 50, // same params as the header menus so React Query serves one shared request
     sortBy: "name",
     sortOrder: "asc",
   });

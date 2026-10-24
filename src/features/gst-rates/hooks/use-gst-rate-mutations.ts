@@ -13,6 +13,7 @@ export function useCreateGstRate() {
 
   return useMutation({
     mutationFn: (data: Record<string, unknown>) => createGstRate(data),
+    meta: { successMessage: "GST rate created successfully" },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: gstRateKeys.all });
     },
@@ -30,6 +31,7 @@ export function useUpdateGstRate() {
       uuid: string;
       data: Record<string, unknown>;
     }) => updateGstRate(uuid, data),
+    meta: { successMessage: "GST rate updated successfully" },
 
     onSuccess: (_result, variables) => {
       queryClient.invalidateQueries({ queryKey: gstRateKeys.all });
@@ -45,6 +47,7 @@ export function useDeleteGstRate() {
 
   return useMutation({
     mutationFn: (uuid: string) => deleteGstRate(uuid),
+    meta: { successMessage: "GST rate deleted successfully" },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: gstRateKeys.all });
     },

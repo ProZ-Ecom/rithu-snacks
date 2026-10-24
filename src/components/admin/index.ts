@@ -7,3 +7,8 @@ export { AdminPageHeader, AdminContent } from "./AdminPageHeader";
 export type { AdminPageHeaderProps, AdminContentProps } from "./AdminPageHeader";
 export { DataTable } from "./data-table";
 export type { DataTableProps } from "./data-table";
+export { ExportExcelButton } from "./ExportExcelButton";
+export type { ExportExcelButtonProps } from "./ExportExcelButton";
+export { AdminTable } from "./AdminTable";
+export type { AdminTableProps } from "./AdminTable";
+

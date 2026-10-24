@@ -9,8 +9,13 @@ import {
   useUpdateUser,
   useDeleteUser,
   useResetUserPassword,
+  getUsers,
 } from "@/features/users/hooks";
 import { DataTable } from "@/components/admin/data-table/DataTable";
+import { BulkActionsBar } from "@/components/admin/data-table/BulkActionsBar";
+import { exportToExcel } from "@/lib/excel-export";
+import { ExportExcelButton } from "@/components/admin/ExportExcelButton";
+import { EXPORT_PRESETS } from "@/lib/export-presets";
 import { AdminPageHeader, AdminContent } from "@/components/admin/AdminPageHeader";
 import { AdminBreadcrumb } from "@/components/admin/AdminBreadcrumb";
 import { AdminTableSkeleton } from "@/components/admin/AdminTableSkeleton";
@@ -39,6 +44,14 @@ export default function AdminUsersPage() {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+
+  const [selectedRowIds, setSelectedRowIds] = useState<Record<string, boolean>>({});
+  const [selectedRows, setSelectedRows] = useState<UserListItem[]>([]);
+
+  useEffect(() => {
+    setSelectedRowIds({});
+    setSelectedRows([]);
+  }, [search, page, pageSize]);
 
   const { data, isLoading, error, refetch } = useUsers({
     page,
@@ -270,17 +283,53 @@ export default function AdminUsersPage() {
               className="w-full max-w-md"
             />
 
-            <Button
-              onClick={() => setModalMode("create")}
-              className="h-11 rounded-xl bg-[var(--color-secondary-600)] px-5 text-sm font-semibold text-white hover:bg-[var(--color-secondary-700)]"
-            >
-              <Plus className="mr-2 h-4 w-4" />
-              Add User
-            </Button>
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <ExportExcelButton
+                data={users}
+                fetchData={async () => {
+                  const res = await getUsers({
+                    page: 1,
+                    limit: 10000,
+                    search: search.trim() || undefined,
+                  });
+                  return res?.data ?? [];
+                }}
+                totalCount={data?.meta?.total ?? users.length}
+                filename="users"
+                sheetName="Users"
+                columns={EXPORT_PRESETS.users}
+              />
+
+              <Button
+                onClick={() => setModalMode("create")}
+                className="h-11 rounded-xl bg-[var(--color-secondary-600)] px-5 text-sm font-semibold text-white hover:bg-[var(--color-secondary-700)] shadow-xs"
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                Add User
+              </Button>
+            </div>
           </div>
 
           {/* Table Container */}
           <div className="mt-6 flex-1 min-h-0 min-w-0 flex flex-col">
+            <BulkActionsBar
+              selectedCount={selectedRows.length}
+              entityName="users"
+              filterNotice={search ? `Filtered by "${search}"` : undefined}
+              onClearSelection={() => {
+                setSelectedRowIds({});
+                setSelectedRows([]);
+              }}
+              onExport={() => {
+                exportToExcel({
+                  filename: "selected_users",
+                  sheetName: "Selected Users",
+                  data: selectedRows,
+                  columns: EXPORT_PRESETS.users,
+                });
+              }}
+            />
+
             <DataTable
               columns={columns}
               data={users}
@@ -297,6 +346,12 @@ export default function AdminUsersPage() {
                 setPageSize(newSize);
                 setPage(1);
               }}
+              selectedRowIds={selectedRowIds}
+              onRowSelectionChange={(newSelection, items) => {
+                setSelectedRowIds(newSelection);
+                setSelectedRows(items);
+              }}
+              getRowId={(row) => String(row.id)}
               className="bg-white"
             />
           </div>

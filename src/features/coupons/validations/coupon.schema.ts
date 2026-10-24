@@ -25,22 +25,40 @@ export const couponBaseSchema = z.object({
     .refine((v) => Number.isFinite(v) && v > 0, "Value must be positive"),
   minOrderAmount: z
     .union([z.number(), z.string()])
-    .refine((v) => v !== "" && v !== undefined && v !== null, "Min order amount is required")
-    .transform((v) => (typeof v === "string" ? Number(v) : v))
-    .refine((v) => Number.isFinite(v) && v >= 0, "Min order amount cannot be negative"),
+    .optional()
+    .nullable()
+    .transform((v) => (v === "" || v === undefined || v === null ? 0 : Number(v)))
+    .refine((v) => Number.isFinite(v) && v >= 0, "Min order amount cannot be negative")
+    .default(0),
   maxDiscount: z
     .union([z.number(), z.string()])
-    .refine((v) => v !== "" && v !== undefined && v !== null, "Max discount is required")
-    .transform((v) => (typeof v === "string" ? Number(v) : v))
-    .refine((v) => Number.isFinite(v) && v > 0, "Max discount must be greater than 0"),
+    .optional()
+    .nullable()
+    .transform((v) => (v === "" || v === undefined || v === null ? null : Number(v)))
+    .refine(
+      (v) => v === null || (Number.isFinite(v) && v > 0),
+      "Max discount must be greater than 0"
+    ),
   usageLimit: z
     .union([z.number(), z.string()])
-    .refine((v) => v !== "" && v !== undefined && v !== null, "Usage limit is required")
-    .transform((v) => (typeof v === "string" ? Number(v) : v))
+    .optional()
+    .nullable()
+    .transform((v) => (v === "" || v === undefined || v === null ? null : Number(v)))
+    .refine(
+      (v) => v === null || (Number.isFinite(v) && Number.isInteger(v) && v >= 1),
+      "Total usage limit must be at least 1"
+    ),
+  usageLimitPerUser: z
+    .union([z.number(), z.string()])
+    .optional()
+    .nullable()
+    .transform((v) => (v === "" || v === undefined || v === null ? 1 : Number(v)))
     .refine(
       (v) => Number.isFinite(v) && Number.isInteger(v) && v >= 1,
-      "Usage limit must be at least 1"
-    ),
+      "Usage limit per user must be at least 1"
+    )
+    .default(1),
+  isFirstOrderOnly: z.boolean().optional().default(false),
   isActive: z.boolean().optional().default(true),
   startsAt: z
     .string()
@@ -110,3 +128,13 @@ export const updateCouponSchema = couponBaseSchema
   );
 
 export type UpdateCouponSchemaInput = z.infer<typeof updateCouponSchema>;
+
+export const applyCouponSchema = z.object({
+  code: z
+    .string()
+    .trim()
+    .min(1, "Coupon code is required")
+    .max(50, "Invalid coupon code"),
+});
+
+export type ApplyCouponInput = z.infer<typeof applyCouponSchema>;

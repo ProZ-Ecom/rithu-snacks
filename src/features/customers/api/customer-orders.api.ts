@@ -18,9 +18,11 @@ export interface CustomerOrdersQueryParams {
 export interface CreateCustomerOrderPayload {
   shippingAddressId: string;
   billingAddressId?: string;
+  deliveryMethod?: string;
   notes?: string;
   paymentMethod?: "CARD" | "COD" | "UPI";
   paymentDetails?: Record<string, any>;
+  couponCode?: string;
 }
 
 export interface CancelCustomerOrderPayload {

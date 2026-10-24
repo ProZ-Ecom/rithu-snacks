@@ -198,7 +198,9 @@ export function ProductVariantSelector({
               price: up.sellingPrice,
               comparePrice: up.basePrice > up.sellingPrice ? up.basePrice : null,
               inStock: !variant.outOfStock,
+              isDefault: Boolean(up.isDefault),
             }));
+
 
             const defaultUnit =
               variant.unitPrices?.find((u) => u.isDefault) || variant.unitPrices?.[0];

@@ -11,11 +11,15 @@ import {
   useDeleteVariant,
   useBulkDeleteVariants,
 } from "@/features/variants/hooks";
+import { getAdminVariants } from "@/features/variants/api/get-variants";
 import { toast } from "@/components/ui/Toast";
 import { useProducts } from "@/features/products/hooks";
 import { useUnits } from "@/features/units/hooks";
 import { DataTable } from "@/components/admin/data-table/DataTable";
 import { BulkActionsBar } from "@/components/admin/data-table/BulkActionsBar";
+import { ExportExcelButton } from "@/components/admin/ExportExcelButton";
+import { exportToExcel, exportVariantsMatrixToExcel } from "@/lib/excel-export";
+import { EXPORT_PRESETS } from "@/lib/export-presets";
 import {
   AdminPageHeader,
   AdminContent,
@@ -239,6 +243,7 @@ export default function AdminVariantsPage() {
                 src={imageUrl}
                 alt={row.original.variantName || "Variant"}
                 fill
+                sizes="48px"
                 className="object-cover"
               />
             ) : (
@@ -545,13 +550,37 @@ export default function AdminVariantsPage() {
                 </button>
               </div>
 
+              <ExportExcelButton
+                data={variants}
+                fetchData={async () => {
+                  const res = await getAdminVariants({
+                    page: 1,
+                    pageSize: 10000,
+                    search: search || undefined,
+                    productIds: selectedProductFilter ? [selectedProductFilter] : undefined,
+                  });
+                  return res.data;
+                }}
+                totalCount={totalItems}
+                filename="items_catalog"
+                sheetName="Items"
+                columns={EXPORT_PRESETS.variants}
+                onCustomExport={(itemsToExport) => {
+                  exportVariantsMatrixToExcel({
+                    filename: "items_catalog",
+                    sheetName: "Items",
+                    variants: itemsToExport,
+                  });
+                }}
+              />
+
               <Button
                 onClick={() => {
                   setCreateStep(1);
                   setCreatedVariant(null);
                   setIsCreateOpen(true);
                 }}
-                className="h-11 rounded-xl bg-[var(--color-secondary-600)] px-5 text-sm font-semibold text-white hover:bg-[var(--color-secondary-700)] cursor-pointer"
+                className="h-11 rounded-xl bg-[var(--color-secondary-600)] px-5 text-sm font-semibold text-white hover:bg-[var(--color-secondary-700)] cursor-pointer shadow-xs"
               >
                 <Plus className="mr-2 h-4 w-4" />
                 Add Item
@@ -568,6 +597,13 @@ export default function AdminVariantsPage() {
               onClearSelection={() => {
                 setSelectedRowIds({});
                 setSelectedRows([]);
+              }}
+              onExport={() => {
+                exportVariantsMatrixToExcel({
+                  filename: "selected_items_catalog",
+                  sheetName: "Selected Items",
+                  variants: selectedRows,
+                });
               }}
               onDelete={() => setIsBulkDeleteOpen(true)}
               isDeleting={bulkDeleteMutation.isPending}

@@ -96,6 +96,14 @@ export const deliveryService = {
                 avatar: latestShipment.delivery_staff.avatar ?? null,
               }
               : null,
+            deliveryPartner: (latestShipment as any).delivery_partners
+              ? {
+                id: String((latestShipment as any).delivery_partners.id),
+                name: (latestShipment as any).delivery_partners.name,
+                code: (latestShipment as any).delivery_partners.code,
+                contactNumber: (latestShipment as any).delivery_partners.contact_number ?? null,
+              }
+              : null,
             createdAt: latestShipment.created_at,
             updatedAt: latestShipment.updated_at,
           }

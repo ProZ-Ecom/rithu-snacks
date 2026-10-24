@@ -22,9 +22,13 @@ import {
   useCreateCategory,
   useUpdateCategory,
 } from "@/features/categories/hooks";
+import { getCategories } from "@/features/categories/api/get-categories";
 import { getImageUrl } from "@/lib/utils";
 import { DataTable } from "@/components/admin/data-table/DataTable";
 import { BulkActionsBar } from "@/components/admin/data-table/BulkActionsBar";
+import { ExportExcelButton } from "@/components/admin/ExportExcelButton";
+import { exportToExcel } from "@/lib/excel-export";
+import { EXPORT_PRESETS } from "@/lib/export-presets";
 import { toast } from "@/components/ui/Toast";
 import { AdminPageHeader, AdminContent } from "@/components/admin/AdminPageHeader";
 import { AdminBreadcrumb } from "@/components/admin/AdminBreadcrumb";
@@ -156,6 +160,8 @@ export default function AdminCategoriesPage() {
           <Button
             variant="ghost"
             size="icon"
+            className="h-8 w-8 text-neutral-500 hover:text-secondary-700 hover:bg-secondary-50"
+            title="Edit Category"
             onClick={() => {
               setSelectedCategory(row.original);
               setIsEditOpen(true);
@@ -164,7 +170,13 @@ export default function AdminCategoriesPage() {
             <Pencil className="h-4 w-4 text-[var(--color-neutral-500)]" />
           </Button>
 
-          <Button variant="ghost" size="icon" onClick={() => setDeleteId(row.original.id)}>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 text-neutral-400 hover:text-rose-600 hover:bg-rose-50"
+            title="Delete Category"
+            onClick={() => setDeleteId(row.original.id)}
+          >
             <Trash2 className="h-4 w-4 text-[var(--color-error-600)]" />
           </Button>
         </div>
@@ -214,14 +226,32 @@ export default function AdminCategoriesPage() {
               className="w-full max-w-md"
             />
 
-            <Button
-              type="button"
-              onClick={() => setIsCreateOpen(true)}
-              className="h-11 rounded-xl bg-[var(--color-secondary-600)] px-5 text-sm font-semibold text-white hover:bg-[var(--color-secondary-700)] shadow-xs"
-            >
-              <Plus className="mr-2 h-4 w-4" />
-              Add Category
-            </Button>
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <ExportExcelButton
+                data={categories}
+                fetchData={async () => {
+                  const res = await getCategories({
+                    page: 1,
+                    pageSize: 10000,
+                    search: search || undefined,
+                  });
+                  return res.data;
+                }}
+                totalCount={data?.meta?.total ?? categories.length}
+                filename="categories"
+                sheetName="Categories"
+                columns={EXPORT_PRESETS.categories}
+              />
+
+              <Button
+                type="button"
+                onClick={() => setIsCreateOpen(true)}
+                className="h-11 rounded-xl bg-[var(--color-secondary-600)] px-5 text-sm font-semibold text-white hover:bg-[var(--color-secondary-700)] shadow-xs"
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                Add Category
+              </Button>
+            </div>
           </div>
 
           {/* Table Container */}
@@ -233,6 +263,14 @@ export default function AdminCategoriesPage() {
               onClearSelection={() => {
                 setSelectedRowIds({});
                 setSelectedRows([]);
+              }}
+              onExport={() => {
+                exportToExcel({
+                  filename: "selected_categories",
+                  sheetName: "Selected Categories",
+                  data: selectedRows,
+                  columns: EXPORT_PRESETS.categories,
+                });
               }}
               onDelete={() => setIsBulkDeleteOpen(true)}
               isDeleting={bulkDeleteMutation.isPending}

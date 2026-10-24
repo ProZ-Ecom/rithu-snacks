@@ -34,18 +34,22 @@ export function CustomerProductCard({ product }: CustomerProductCardProps) {
       price: up.sellingPrice,
       comparePrice: up.basePrice > up.sellingPrice ? up.basePrice : null,
       inStock: true,
+      isDefault: Boolean((up as any).isDefault),
     }));
   }, [product.unitPrices]);
 
+  const defaultUnit = product.unitPrices?.find((u: any) => u.isDefault) || product.unitPrices?.[0];
   const [selectedVariantId, setSelectedVariantId] = React.useState(
-    variants[0]?.id || ""
+    defaultUnit?.id || variants[0]?.id || ""
   );
 
   React.useEffect(() => {
-    if (variants.length > 0 && !variants.some((v) => v.id === selectedVariantId)) {
-      setSelectedVariantId(variants[0].id);
+    const defaultId = product.unitPrices?.find((u: any) => u.isDefault)?.id || product.unitPrices?.[0]?.id;
+    if (defaultId) {
+      setSelectedVariantId(defaultId);
     }
-  }, [variants, selectedVariantId]);
+  }, [product.unitPrices]);
+
 
   const activeVariantId = selectedVariantId || variants[0]?.id;
   const isWishlisted = Boolean(activeVariantId && wishlistedIds.has(activeVariantId));

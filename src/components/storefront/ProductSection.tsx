@@ -34,6 +34,7 @@ export function ProductSection({ selectedCategoryId }: ProductSectionProps) {
     categoryIds: selectedCategoryId ? [selectedCategoryId] : undefined,
     page: 1,
     pageSize: 20,
+    skipFacets: true,
     sortBy: "createdAt",
     sortOrder: "desc",
   });
@@ -114,6 +115,7 @@ export function ProductSection({ selectedCategoryId }: ProductSectionProps) {
             <SnackCard
               key={product.id}
               product={product}
+              isFeatured={product.isFeatured}
               isWishlisted={product.unitPrices.some((u) => wishlistedIds.has(u.id))}
               onWishlistToggle={(unitPriceId) =>
                 handleWishlistToggle(product, unitPriceId || product.unitPrices[0]?.id)

@@ -113,6 +113,29 @@ export const orderDetailInclude = Prisma.validator<Prisma.OrderInclude>()({
           phone: true,
         },
       },
+      delivery_partners: {
+        select: {
+          id: true,
+          name: true,
+          code: true,
+          contact_number: true,
+        },
+      },
+    },
+  },
+  coupons: {
+    select: {
+      id: true,
+      code: true,
+      type: true,
+      value: true,
+    },
+  },
+  coupon_usage: {
+    where: { is_active: true },
+    select: {
+      id: true,
+      discount_amount: true,
     },
   },
 });
@@ -189,6 +212,10 @@ export function formatOrderDelivery(
     id: bigint;
     uuid: string | null;
     assignment_status: string | null;
+    tracking_number?: string | null;
+    delivery_partner_id?: bigint | null;
+    status?: string | null;
+    shipped_at?: Date | null;
     delivery_notes?: string | null;
     created_at: Date;
     accepted_at: Date | null;
@@ -200,6 +227,12 @@ export function formatOrderDelivery(
       email?: string | null;
       phone: string | null;
     } | null;
+    delivery_partners?: {
+      id: bigint;
+      name: string;
+      code: string;
+      contact_number?: string | null;
+    } | null;
   }> | null
 ) {
   if (!shipments || shipments.length === 0) {
@@ -209,14 +242,20 @@ export function formatOrderDelivery(
       deliveryId: null,
       staff: null,
       assignedAt: null,
+      trackingNumber: null,
+      deliveryPartnerId: null,
+      deliveryPartner: null,
+      status: null,
+      shippedAt: null,
       deliveryNotes: null,
     };
   }
 
   const latest = shipments[0];
   const staff = latest.delivery_staff;
+  const partner = latest.delivery_partners;
 
-  const isAssigned = Boolean(staff);
+  const isAssigned = Boolean(staff) || Boolean(partner) || latest.assignment_status !== null;
 
   return {
     isAssigned,
@@ -231,6 +270,18 @@ export function formatOrderDelivery(
         }
       : null,
     assignedAt: latest.created_at ? latest.created_at.toISOString() : null,
+    trackingNumber: latest.tracking_number ?? null,
+    deliveryPartnerId: latest.delivery_partner_id ? String(latest.delivery_partner_id) : null,
+    deliveryPartner: partner
+      ? {
+          id: String(partner.id),
+          name: partner.name,
+          code: partner.code,
+          contactNumber: partner.contact_number ?? null,
+        }
+      : null,
+    status: latest.status ?? null,
+    shippedAt: latest.shipped_at ? latest.shipped_at.toISOString() : null,
     deliveryNotes: latest.delivery_notes ?? null,
   };
 }
@@ -272,6 +323,10 @@ export function formatOrderDetail(
     totalAmount: Number(order.totalAmount),
     totalItems,
     delivery: formatOrderDelivery((order as any).shipments),
+    couponCode: (order as any).coupons?.code ?? null,
+    couponDiscount: (order as any).coupon_usage?.[0]?.discount_amount
+      ? Number((order as any).coupon_usage[0].discount_amount)
+      : null,
     notes: order.notes ?? null,
     placedAt: order.placed_at ?? null,
     createdAt: order.createdAt,
@@ -364,6 +419,8 @@ export const orderRepository = {
   async createCustomerOrderTransaction(params: {
     userId: bigint;
     cartId: bigint;
+    couponId?: bigint | null;
+    couponDiscount?: number;
     subtotal: number;
     discountAmount?: number;
     shippingCharge?: number;
@@ -423,6 +480,7 @@ export const orderRepository = {
           orderNumber,
           userId: params.userId,
           cart_id: params.cartId,
+          couponId: params.couponId ?? null,
           order_status: (params.orderStatus ?? "pending") as any,
           payment_status: (params.paymentStatus ?? "pending") as any,
           subtotal: params.subtotal,
@@ -437,6 +495,23 @@ export const orderRepository = {
           updated_by: params.userId,
         },
       });
+
+      // 1b. Record coupon usage if a valid coupon was applied
+      if (params.couponId && (params.couponDiscount ?? 0) > 0) {
+        await tx.coupon_usage.create({
+          data: {
+            uuid: crypto.randomUUID(),
+            coupon_id: params.couponId,
+            user_id: params.userId,
+            order_id: createdOrder.id,
+            discount_amount: params.couponDiscount ?? 0,
+            used_at: now,
+            is_active: true,
+            created_by: params.userId,
+            updated_by: params.userId,
+          },
+        });
+      }
 
       // 2. Create Addresses (Shipping & Billing)
       await tx.orderAddress.createMany({
@@ -521,10 +596,11 @@ export const orderRepository = {
         },
       });
 
-      // 5. Convert Cart & Deactivate Items
+      // 5. Convert Cart & Deactivate Items & clear coupon_id
       await tx.cart.update({
         where: { id: params.cartId },
         data: {
+          coupon_id: null,
           status: "converted",
           last_activity_at: now,
           updatedAt: now,
@@ -873,6 +949,14 @@ export const orderRepository = {
                   phone: true,
                 },
               },
+              delivery_partners: {
+                select: {
+                  id: true,
+                  name: true,
+                  code: true,
+                  contact_number: true,
+                },
+              },
             },
           },
         },
@@ -931,6 +1015,12 @@ export const orderRepository = {
           created_by: params.changedBy,
           updated_by: params.changedBy,
         },
+      });
+
+      // Rollback coupon usage if applied, so customer gets their quota back
+      await tx.coupon_usage.updateMany({
+        where: { order_id: params.orderId, is_active: true },
+        data: { is_active: false, updated_at: now },
       });
 
       const updated = await tx.order.findUniqueOrThrow({

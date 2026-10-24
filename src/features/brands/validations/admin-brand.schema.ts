@@ -31,7 +31,7 @@ export type UpdateAdminBrandInput = z.infer<typeof updateAdminBrandSchema>;
 
 export const adminBrandsQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1).optional(),
-  pageSize: z.coerce.number().int().min(1).max(100).default(10).optional(),
+  pageSize: z.coerce.number().int().min(1).max(100000).default(10).optional(),
   search: z.string().trim().optional(),
 });
 

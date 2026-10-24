@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
-import { Check, Package, X } from "lucide-react";
+import { Check, Package, X, Navigation, ExternalLink, Truck } from "lucide-react";
 import { formatPrice, getImageUrl } from "@/lib/utils";
 import type { OrderDetailResponse } from "@/features/orders/types";
 import { useCustomerOrders, useCancelCustomerOrder } from "../../hooks/use-customer-orders";
@@ -11,6 +11,7 @@ import { CustomDropdown, type DropdownOption } from "./CustomDropdown";
 import { SearchInput } from "@/components/common/search-input";
 import { ProductImage } from "@/components/common/ProductImage";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { LiveTrackingModal } from "@/features/orders/components/LiveTrackingModal";
 
 const STATUS_OPTIONS: DropdownOption[] = [
   { value: "all", label: "All Orders" },
@@ -41,6 +42,11 @@ export function OrdersTab({
   const [selectedStatus, setSelectedStatus] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [trackingOrder, setTrackingOrder] = useState<OrderDetailResponse | null>(null);
+  const [liveCourierTracking, setLiveCourierTracking] = useState<{
+    trackingNumber: string;
+    courierName?: string;
+    orderNumber?: string;
+  } | null>(null);
   const [reorderingId, setReorderingId] = useState<string | null>(null);
   const [reorderSuccessId, setReorderSuccessId] = useState<string | null>(null);
   const [orderToCancel, setOrderToCancel] = useState<OrderDetailResponse | null>(null);
@@ -345,12 +351,32 @@ export function OrdersTab({
                     )}
                   </div>
 
-                  <span
-                    className={`inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider px-3 py-1.5 rounded-full border ${statusMeta.bg}`}
-                  >
-                    <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${statusMeta.dot}`} />
-                    {order.status.replace(/_/g, " ")}
-                  </span>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {order.delivery?.trackingNumber && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setLiveCourierTracking({
+                            trackingNumber: order.delivery?.trackingNumber || "",
+                            courierName: order.delivery?.deliveryPartner?.name || "ST Courier",
+                            orderNumber: order.orderNumber,
+                          })
+                        }
+                        className="inline-flex items-center gap-1.5 text-[11px] font-bold text-blue-700 bg-blue-50 px-2.5 py-1 rounded-full border border-blue-200 hover:bg-blue-100 transition-colors cursor-pointer"
+                        title="Live ST Courier Tracking"
+                      >
+                        <Navigation className="h-3 w-3 text-blue-600" />
+                        <span>ST Courier: {order.delivery.trackingNumber}</span>
+                      </button>
+                    )}
+
+                    <span
+                      className={`inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider px-3 py-1.5 rounded-full border ${statusMeta.bg}`}
+                    >
+                      <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${statusMeta.dot}`} />
+                      {order.status.replace(/_/g, " ")}
+                    </span>
+                  </div>
                 </div>
 
                 {/* Ordered Items List */}
@@ -404,6 +430,26 @@ export function OrdersTab({
 
                 {/* Card Action Buttons */}
                 <div className="px-5 pb-4 pt-1 flex items-center gap-2.5 flex-wrap border-t border-theme-border-subtle">
+                  {order.delivery?.trackingNumber && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setLiveCourierTracking({
+                          trackingNumber: order.delivery?.trackingNumber || "",
+                          courierName: order.delivery?.deliveryPartner?.name || "ST Courier",
+                          orderNumber: order.orderNumber,
+                        })
+                      }
+                      className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold uppercase tracking-wider py-2.5 px-4 rounded-lg transition-all cursor-pointer min-h-[40px] inline-flex items-center gap-2 shadow-xs"
+                    >
+                      <span className="relative flex h-2 w-2">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-white"></span>
+                      </span>
+                      <span>Live ST Courier</span>
+                    </button>
+                  )}
+
                   {isOngoing ? (
                     <button
                       type="button"
@@ -502,6 +548,34 @@ export function OrdersTab({
                 ✕
               </button>
             </div>
+
+            {/* ST Courier Live Checkpoints Quick Action Banner */}
+            {trackingOrder.delivery?.trackingNumber && (
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-3.5 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2 min-w-0">
+                  <Navigation className="h-4 w-4 text-blue-600 shrink-0" />
+                  <div className="text-xs">
+                    <span className="font-bold text-blue-900">Shipped via ST Courier: </span>
+                    <span className="font-mono text-blue-800 font-semibold">{trackingOrder.delivery.trackingNumber}</span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const t = trackingOrder;
+                    setTrackingOrder(null);
+                    setLiveCourierTracking({
+                      trackingNumber: t.delivery?.trackingNumber || "",
+                      courierName: t.delivery?.deliveryPartner?.name || "ST Courier",
+                      orderNumber: t.orderNumber,
+                    });
+                  }}
+                  className="text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 px-3 py-1.5 rounded-lg shrink-0 transition-colors cursor-pointer"
+                >
+                  View Live Checkpoints
+                </button>
+              </div>
+            )}
 
             {/* Stepper Visual (4 Breakpoints: Placed -> Packed -> Out for Delivery -> Delivered / Returned / Cancelled) */}
             {(() => {
@@ -707,6 +781,17 @@ export function OrdersTab({
         variant="destructive"
         isLoading={cancelMutation.isPending}
       />
+
+      {/* Live ST Courier Tracking Modal */}
+      {liveCourierTracking && (
+        <LiveTrackingModal
+          open={Boolean(liveCourierTracking)}
+          onClose={() => setLiveCourierTracking(null)}
+          trackingNumber={liveCourierTracking.trackingNumber}
+          courierName={liveCourierTracking.courierName}
+          orderNumber={liveCourierTracking.orderNumber}
+        />
+      )}
     </div>
   );
 }

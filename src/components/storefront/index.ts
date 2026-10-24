@@ -13,6 +13,7 @@ export * from "./footer/FooterLinks";
 export * from "./HeroSlider";
 export * from "./CategorySection";
 export * from "./ProductSection";
+export * from "./FeaturedSection";
 export * from "./Banner";
 export * from "./OfferPopup";
 export * from "./OfferReels";

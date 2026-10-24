@@ -10,6 +10,10 @@ import {
   useDeletePermission,
 } from "@/features/roles/hooks";
 import { DataTable } from "@/components/admin/data-table/DataTable";
+import { BulkActionsBar } from "@/components/admin/data-table/BulkActionsBar";
+import { exportToExcel } from "@/lib/excel-export";
+import { ExportExcelButton } from "@/components/admin/ExportExcelButton";
+import { EXPORT_PRESETS } from "@/lib/export-presets";
 import { AdminPageHeader, AdminContent } from "@/components/admin/AdminPageHeader";
 import { AdminTableSkeleton } from "@/components/admin/AdminTableSkeleton";
 import { ErrorState } from "@/components/ui/error-state";
@@ -34,6 +38,14 @@ export default function AdminPermissionsPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingPermission, setEditingPermission] = useState<PermissionListItem | null>(null);
   const [deleteId, setDeleteId] = useState<number | null>(null);
+
+  const [selectedRowIds, setSelectedRowIds] = useState<Record<string, boolean>>({});
+  const [selectedRows, setSelectedRows] = useState<PermissionListItem[]>([]);
+
+  useEffect(() => {
+    setSelectedRowIds({});
+    setSelectedRows([]);
+  }, [search, page, pageSize]);
 
   const { data: permissionsData, isLoading, error, refetch } = usePermissions();
   const createMutation = useCreatePermission();
@@ -200,18 +212,46 @@ export default function AdminPermissionsPage() {
               className="w-full max-w-md"
             />
 
-            <Button
-              type="button"
-              onClick={() => handleOpenModal()}
-              className="h-11 rounded-xl bg-[var(--color-secondary-600)] px-5 text-sm font-semibold text-white hover:bg-[var(--color-secondary-700)] cursor-pointer"
-            >
-              <Plus className="mr-2 h-4 w-4" />
-              Add Permission
-            </Button>
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <ExportExcelButton
+                data={filteredPermissions}
+                totalCount={filteredPermissions.length}
+                filename="permissions"
+                sheetName="Permissions"
+                columns={EXPORT_PRESETS.permissions}
+              />
+
+              <Button
+                type="button"
+                onClick={() => handleOpenModal()}
+                className="h-11 rounded-xl bg-[var(--color-secondary-600)] px-5 text-sm font-semibold text-white hover:bg-[var(--color-secondary-700)] cursor-pointer shadow-xs"
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                Add Permission
+              </Button>
+            </div>
           </div>
 
           {/* Table Container */}
           <div className="mt-6 flex-1 min-h-0 min-w-0 flex flex-col">
+            <BulkActionsBar
+              selectedCount={selectedRows.length}
+              entityName="permissions"
+              filterNotice={search ? `Filtered by "${search}"` : undefined}
+              onClearSelection={() => {
+                setSelectedRowIds({});
+                setSelectedRows([]);
+              }}
+              onExport={() => {
+                exportToExcel({
+                  filename: "selected_permissions",
+                  sheetName: "Selected Permissions",
+                  data: selectedRows,
+                  columns: EXPORT_PRESETS.permissions,
+                });
+              }}
+            />
+
             <DataTable
               columns={columns}
               data={paginatedPermissions}
@@ -225,6 +265,12 @@ export default function AdminPermissionsPage() {
                 setPageSize(newSize);
                 setPage(1);
               }}
+              selectedRowIds={selectedRowIds}
+              onRowSelectionChange={(newSelection, items) => {
+                setSelectedRowIds(newSelection);
+                setSelectedRows(items);
+              }}
+              getRowId={(row) => String(row.id)}
               emptyMessage={
                 search
                   ? "No permissions match your search."

@@ -91,17 +91,22 @@ export const userRepository = {
     };
   },
 
-  async findById(idOrUuid: string | number | bigint) {
-    let where: Prisma.UserWhereInput;
+  async findById(idOrUuidOrEmail: string | number | bigint) {
+    if (!idOrUuidOrEmail) return null;
 
-    if (typeof idOrUuid === "string" && (idOrUuid.includes("-") || isNaN(Number(idOrUuid)))) {
-      where = { uuid: idOrUuid };
-    } else {
-      where = { id: BigInt(idOrUuid) };
-    }
+    const identifier = String(idOrUuidOrEmail).trim();
+    if (!identifier) return null;
+
+    const isNumeric = /^\d+$/.test(identifier);
 
     const user = await db.user.findFirst({
-      where,
+      where: {
+        OR: [
+          { uuid: identifier },
+          { email: identifier },
+          ...(isNumeric ? [{ id: BigInt(identifier) }] : []),
+        ],
+      },
       select: userSelect,
     });
     return user ? formatUser(user) : null;

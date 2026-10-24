@@ -52,8 +52,8 @@ export type UpdateAdminCategoryInput = z.infer<
 
 export const adminCategoriesQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1).optional(),
-  pageSize: z.coerce.number().int().min(1).max(100).default(10).optional(),
-  limit: z.coerce.number().int().min(1).max(100).optional(),
+  pageSize: z.coerce.number().int().min(1).max(100000).default(10).optional(),
+  limit: z.coerce.number().int().min(1).max(100000).optional(),
   search: z.string().trim().optional(),
   isActive: z.boolean().optional(),
 });
@@ -69,14 +69,14 @@ export const adminCategoryListSchema = z
       .number()
       .int()
       .min(1, "pageSize must be at least 1")
-      .max(100, "pageSize cannot exceed 100")
+      .max(100000, "pageSize cannot exceed 100000")
       .default(10)
       .optional(),
     limit: z
       .number()
       .int()
       .min(1, "limit must be at least 1")
-      .max(100, "limit cannot exceed 100")
+      .max(100000, "limit cannot exceed 100000")
       .optional(),
     search: z.string().trim().optional(),
     isActive: z.boolean().optional(),

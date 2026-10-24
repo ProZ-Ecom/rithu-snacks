@@ -8,8 +8,13 @@ import {
   useCreateCoupon,
   useUpdateCoupon,
   useDeleteCoupon,
+  getCoupons,
 } from "@/features/coupons/hooks";
 import { DataTable } from "@/components/admin/data-table/DataTable";
+import { BulkActionsBar } from "@/components/admin/data-table/BulkActionsBar";
+import { ExportExcelButton } from "@/components/admin/ExportExcelButton";
+import { exportToExcel } from "@/lib/excel-export";
+import { EXPORT_PRESETS } from "@/lib/export-presets";
 import {
   AdminPageHeader,
   AdminContent,
@@ -46,6 +51,15 @@ export default function AdminCouponsPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingCoupon, setEditingCoupon] = useState<CouponListItem | null>(null);
 
+  // Bulk Selection State
+  const [selectedRowIds, setSelectedRowIds] = useState<Record<string, boolean>>({});
+  const [selectedRows, setSelectedRows] = useState<CouponListItem[]>([]);
+
+  useEffect(() => {
+    setSelectedRowIds({});
+    setSelectedRows([]);
+  }, [search, page, pageSize]);
+
   const { data, isLoading, error, refetch } = useCoupons({
     page,
     limit: pageSize,
@@ -74,6 +88,8 @@ export default function AdminCouponsPage() {
       minOrderAmount: "" as unknown as number,
       maxDiscount: "" as unknown as number,
       usageLimit: "" as unknown as number,
+      usageLimitPerUser: 1,
+      isFirstOrderOnly: false,
       isActive: true,
       startsAt: "",
       expiresAt: "",
@@ -93,6 +109,8 @@ export default function AdminCouponsPage() {
         minOrderAmount: editingCoupon.minOrderAmount ?? ("" as unknown as number),
         maxDiscount: editingCoupon.maxDiscount ?? ("" as unknown as number),
         usageLimit: editingCoupon.usageLimit ?? ("" as unknown as number),
+        usageLimitPerUser: editingCoupon.usageLimitPerUser ?? 1,
+        isFirstOrderOnly: Boolean(editingCoupon.isFirstOrderOnly),
         isActive: editingCoupon.isActive,
         startsAt: editingCoupon.startsAt
           ? new Date(editingCoupon.startsAt).toISOString().split("T")[0]
@@ -109,6 +127,8 @@ export default function AdminCouponsPage() {
         minOrderAmount: "" as unknown as number,
         maxDiscount: "" as unknown as number,
         usageLimit: "" as unknown as number,
+        usageLimitPerUser: 1,
+        isFirstOrderOnly: false,
         isActive: true,
         startsAt: "",
         expiresAt: "",
@@ -138,6 +158,8 @@ export default function AdminCouponsPage() {
             minOrderAmount: "" as unknown as number,
             maxDiscount: "" as unknown as number,
             usageLimit: "" as unknown as number,
+            usageLimitPerUser: 1,
+            isFirstOrderOnly: false,
             isActive: true,
             startsAt: "",
             expiresAt: "",
@@ -159,6 +181,8 @@ export default function AdminCouponsPage() {
         minOrderAmount: "" as unknown as number,
         maxDiscount: "" as unknown as number,
         usageLimit: "" as unknown as number,
+        usageLimitPerUser: 1,
+        isFirstOrderOnly: false,
         isActive: true,
         startsAt: "",
         expiresAt: "",
@@ -204,13 +228,31 @@ export default function AdminCouponsPage() {
       },
     },
     {
-      id: "usage",
-      header: "Usage",
+      id: "eligibility",
+      header: "Eligibility",
       cell: ({ row }) => (
-        <span className="text-neutral-700 text-xs sm:text-sm">
-          {row.original.usedCount}
-          {row.original.usageLimit ? ` / ${row.original.usageLimit}` : ""}
-        </span>
+        row.original.isFirstOrderOnly ? (
+          <Badge variant="warning" className="text-[11px] font-semibold">
+            1st Order Only
+          </Badge>
+        ) : (
+          <span className="text-neutral-500 text-xs">All Customers</span>
+        )
+      ),
+    },
+    {
+      id: "usage",
+      header: "Uses & Limits",
+      cell: ({ row }) => (
+        <div className="text-xs space-y-0.5">
+          <div className="font-medium text-neutral-800">
+            {row.original.usedCount} used
+            {row.original.usageLimit ? ` / ${row.original.usageLimit} max` : " (Unlimited)"}
+          </div>
+          <div className="text-[11px] text-neutral-500">
+            {row.original.usageLimitPerUser ? `${row.original.usageLimitPerUser} per user` : "1 per user"}
+          </div>
+        </div>
       ),
     },
     {
@@ -285,18 +327,54 @@ export default function AdminCouponsPage() {
               className="w-full max-w-md"
             />
 
-            <Button
-              type="button"
-              onClick={() => handleOpenModal()}
-              className="h-11 rounded-xl bg-[var(--color-secondary-600)] px-5 text-sm font-semibold text-white hover:bg-[var(--color-secondary-700)] cursor-pointer"
-            >
-              <Plus className="mr-2 h-4 w-4" />
-              Add Coupon
-            </Button>
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <ExportExcelButton
+                data={coupons}
+                fetchData={async () => {
+                  const res = await getCoupons({
+                    page: 1,
+                    limit: 10000,
+                    search: search.trim() || undefined,
+                  });
+                  return res?.data ?? [];
+                }}
+                totalCount={data?.meta?.total ?? coupons.length}
+                filename="coupons"
+                sheetName="Coupons"
+                columns={EXPORT_PRESETS.coupons}
+              />
+
+              <Button
+                type="button"
+                onClick={() => handleOpenModal()}
+                className="h-11 rounded-xl bg-[var(--color-secondary-600)] px-5 text-sm font-semibold text-white hover:bg-[var(--color-secondary-700)] cursor-pointer shadow-xs"
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                Add Coupon
+              </Button>
+            </div>
           </div>
 
           {/* Table Container */}
           <div className="mt-6 flex-1 min-h-0 min-w-0 flex flex-col">
+            <BulkActionsBar
+              selectedCount={selectedRows.length}
+              entityName="coupon"
+              filterNotice={search ? `Filtered by "${search}"` : undefined}
+              onClearSelection={() => {
+                setSelectedRowIds({});
+                setSelectedRows([]);
+              }}
+              onExport={() => {
+                exportToExcel({
+                  filename: "selected_coupons",
+                  sheetName: "Selected Coupons",
+                  data: selectedRows,
+                  columns: EXPORT_PRESETS.coupons,
+                });
+              }}
+            />
+
             <DataTable
               columns={columns}
               data={coupons}
@@ -313,6 +391,12 @@ export default function AdminCouponsPage() {
                 setPageSize(newSize);
                 setPage(1);
               }}
+              selectedRowIds={selectedRowIds}
+              onRowSelectionChange={(newSelection, items) => {
+                setSelectedRowIds(newSelection);
+                setSelectedRows(items);
+              }}
+              getRowId={(row) => String(row.id)}
               emptyMessage={
                 search
                   ? "No coupons match your search."
@@ -467,25 +551,68 @@ export default function AdminCouponsPage() {
             </div>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Usage Limit <span className="text-rose-500">*</span>
-            </label>
-            <input
-              type="number"
-              {...register("usageLimit", {
-                setValueAs: (v) => (v === "" || v === null || v === undefined ? "" : Number(v)),
-              })}
-              className={`w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 ${
-                errors.usageLimit
-                  ? "border-rose-500 focus:border-rose-500 focus:ring-rose-200"
-                  : "border-gray-300 focus:border-primary focus:ring-primary/30"
-              }`}
-              placeholder="Enter usage limit"
-            />
-            {errors.usageLimit && (
-              <p className="mt-1 text-xs text-rose-600 font-medium">{errors.usageLimit.message}</p>
-            )}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Total Orders Limit (All Customers)
+              </label>
+              <input
+                type="number"
+                {...register("usageLimit", {
+                  setValueAs: (v) => (v === "" || v === null || v === undefined ? "" : Number(v)),
+                })}
+                className={`w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 ${
+                  errors.usageLimit
+                    ? "border-rose-500 focus:border-rose-500 focus:ring-rose-200"
+                    : "border-gray-300 focus:border-primary focus:ring-primary/30"
+                }`}
+                placeholder="Unlimited (leave empty)"
+              />
+              <p className="mt-1 text-[11px] text-gray-500">Max total orders across all customers (e.g. 50 for flash sales)</p>
+              {errors.usageLimit && (
+                <p className="mt-1 text-xs text-rose-600 font-medium">{errors.usageLimit.message}</p>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Uses Per Customer <span className="text-rose-500">*</span>
+              </label>
+              <input
+                type="number"
+                min={1}
+                {...register("usageLimitPerUser", {
+                  setValueAs: (v) => (v === "" || v === null || v === undefined ? 1 : Number(v)),
+                })}
+                className={`w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 ${
+                  errors.usageLimitPerUser
+                    ? "border-rose-500 focus:border-rose-500 focus:ring-rose-200"
+                    : "border-gray-300 focus:border-primary focus:ring-primary/30"
+                }`}
+                placeholder="1"
+              />
+              <p className="mt-1 text-[11px] text-gray-500">How many times each customer can use this code (default: 1)</p>
+              {errors.usageLimitPerUser && (
+                <p className="mt-1 text-xs text-rose-600 font-medium">{errors.usageLimitPerUser.message}</p>
+              )}
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-amber-200 bg-amber-50/50 p-3">
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                {...register("isFirstOrderOnly")}
+                id="isFirstOrderOnly"
+                className="h-4 w-4 rounded border-gray-300 text-secondary-600 focus:ring-secondary-500"
+              />
+              <label htmlFor="isFirstOrderOnly" className="text-sm font-semibold text-amber-900 cursor-pointer">
+                Only valid for new customers (1st order only)
+              </label>
+            </div>
+            <p className="text-[11px] text-amber-700 ml-6 mt-0.5">
+              If checked, only customers with zero previous orders can apply this code (e.g. WELCOME50).
+            </p>
           </div>
 
           <div className="grid grid-cols-2 gap-4">

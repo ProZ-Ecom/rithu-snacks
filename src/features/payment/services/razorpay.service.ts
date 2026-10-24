@@ -38,8 +38,57 @@ export const razorpayService = {
         throw ApiError.badRequest("Your cart is empty. Please add items before checking out.");
       }
 
+      // Check real-time stock before creating Razorpay order
+      for (const item of cart.items) {
+        if (!item.variantUnitPriceId) continue;
+        const vup = await db.variantUnitPrice.findFirst({
+          where: {
+            OR: [
+              { uuid: item.variantUnitPriceId },
+              ...(isNaN(Number(item.variantUnitPriceId)) ? [] : [{ id: BigInt(item.variantUnitPriceId) }]),
+            ],
+            deleted_at: null,
+          },
+          include: {
+            variant: true,
+            inventories: {
+              where: { is_active: true },
+              select: { quantity_available: true, quantity_reserved: true },
+            },
+          },
+        });
+
+        if (!vup || !vup.isActive || vup.deleted_at !== null) {
+          throw ApiError.badRequest(
+            `"${item.productName}" is no longer available. Please remove it from your cart.`
+          );
+        }
+
+        const variant = vup.variant;
+        if (!variant || !variant.isActive || variant.deleted_at !== null || variant.out_of_stock) {
+          throw ApiError.badRequest(
+            `"${item.productName}" is out of stock. Please remove it from your cart.`
+          );
+        }
+
+        // If numerical inventory is explicitly tracked and positive, ensure sufficient available stock
+        if (vup.inventories && typeof vup.inventories.quantity_available === "number") {
+          const rawAvailable = vup.inventories.quantity_available;
+          const reserved = vup.inventories.quantity_reserved || 0;
+          const effectiveStock = Math.max(0, rawAvailable - reserved);
+
+          if (rawAvailable > 0 && effectiveStock < item.quantity) {
+            throw ApiError.badRequest(
+              `Only ${effectiveStock} unit${effectiveStock === 1 ? "" : "s"} left for "${item.productName}". Please update your cart.`
+            );
+          }
+        }
+      }
+
+
       const payableBeforeShipping = cart.total;
-      const shippingCharge = payableBeforeShipping >= 499 ? 0 : 49;
+      const isExpress = (input.deliveryMethod || "").toLowerCase() === "express";
+      const shippingCharge = isExpress ? 99 : payableBeforeShipping >= 499 ? 0 : 49;
       const payableAmount = payableBeforeShipping + shippingCharge;
       if (payableAmount <= 0) {
         throw ApiError.badRequest("Invalid cart payable amount.");
@@ -57,6 +106,7 @@ export const razorpayService = {
             userId: String(userId),
             checkoutType: "cart",
             shippingAddressId: input.shippingAddressId || "",
+            deliveryMethod: input.deliveryMethod || "standard",
           },
         });
       } catch (err: any) {
@@ -193,11 +243,17 @@ export const razorpayService = {
       .update(`${input.razorpay_order_id}|${input.razorpay_payment_id}`)
       .digest("hex");
 
-    const isSignatureValid = expectedSignature === input.razorpay_signature;
+    const expectedBuffer = Buffer.from(expectedSignature, "utf8");
+    const receivedBuffer = Buffer.from(input.razorpay_signature || "", "utf8");
+
+    const isSignatureValid =
+      expectedBuffer.length === receivedBuffer.length &&
+      crypto.timingSafeEqual(expectedBuffer, receivedBuffer);
 
     if (!isSignatureValid) {
       throw ApiError.badRequest("Invalid payment signature. Verification rejected.");
     }
+
 
     // 2. Handle Cart-First Payment Verification:
     // Create the order in the database ONLY NOW, after signature is cryptographically verified!
@@ -206,19 +262,48 @@ export const razorpayService = {
         throw ApiError.badRequest("Shipping address is required to complete the order.");
       }
 
-      const createdOrder = await orderService.createCustomerOrder(sessionUserId, {
-        shippingAddressId: input.shippingAddressId,
-        billingAddressId: input.billingAddressId || input.shippingAddressId,
-        notes: input.notes,
-        paymentMethod: "CARD",
-        paymentDetails: {
-          gateway: "RAZORPAY",
-          isPaid: true,
-          razorpay_order_id: input.razorpay_order_id,
-          razorpay_payment_id: input.razorpay_payment_id,
-          razorpay_signature: input.razorpay_signature,
-        },
-      });
+      let createdOrder;
+      try {
+        createdOrder = await orderService.createCustomerOrder(sessionUserId, {
+          shippingAddressId: input.shippingAddressId,
+          billingAddressId: input.billingAddressId || input.shippingAddressId,
+          deliveryMethod: input.deliveryMethod || "standard",
+          notes: input.notes,
+          paymentMethod: "CARD",
+          paymentDetails: {
+            gateway: "RAZORPAY",
+            isPaid: true,
+            razorpay_order_id: input.razorpay_order_id,
+            razorpay_payment_id: input.razorpay_payment_id,
+            razorpay_signature: input.razorpay_signature,
+          },
+        });
+      } catch (orderErr: any) {
+        // Stock reservation or order creation failed after payment capture.
+        // Automatically refund captured payment immediately so customer is protected.
+        try {
+          const razorpay = getRazorpayClient();
+          await razorpay.payments.refund(input.razorpay_payment_id, {
+            notes: {
+              reason: "Stock unavailable during checkout; automatic full refund initiated",
+              razorpay_order_id: input.razorpay_order_id,
+            },
+          });
+          console.warn(
+            `[Razorpay] Auto-refunded payment ${input.razorpay_payment_id} due to order placement failure: ${orderErr?.message}`
+          );
+        } catch (refundErr: any) {
+          console.error(
+            `[Razorpay] CRITICAL: Auto-refund failed for payment ${input.razorpay_payment_id}:`,
+            refundErr
+          );
+        }
+
+        const baseMsg = orderErr?.message || "Could not complete order due to stock unavailability.";
+        throw ApiError.badRequest(
+          `${baseMsg} A full refund has been automatically initiated to your payment method.`
+        );
+      }
 
       // Find the created order to retrieve internal BigInt ID
       const dbOrder = await db.order.findFirst({
@@ -326,21 +411,29 @@ export const razorpayService = {
       throw ApiError.badRequest("Missing Razorpay webhook signature header");
     }
 
-    // 1. Verify webhook signature
+    // 1. Verify webhook signature using constant-time comparison
     const expectedSignature = crypto
       .createHmac("sha256", webhookSecret)
       .update(rawBody)
       .digest("hex");
 
-    if (expectedSignature !== signatureHeader) {
+    const expectedBuffer = Buffer.from(expectedSignature, "utf8");
+    const receivedBuffer = Buffer.from(signatureHeader || "", "utf8");
+
+    const isSignatureValid =
+      expectedBuffer.length === receivedBuffer.length &&
+      crypto.timingSafeEqual(expectedBuffer, receivedBuffer);
+
+    if (!isSignatureValid) {
       throw ApiError.badRequest("Invalid webhook signature");
     }
+
 
     // 2. Parse event payload
     const event = JSON.parse(rawBody);
     const eventType = event.event as string;
 
-    // We specifically handle payment captured or order paid events
+    // Handle payment captured or order paid events
     if (eventType === "order.paid" || eventType === "payment.captured") {
       const paymentEntity = event.payload?.payment?.entity;
       const gatewayOrderId = paymentEntity?.order_id || event.payload?.order?.entity?.id;
@@ -408,7 +501,6 @@ export const razorpayService = {
     amount?: number;
     reason?: string;
   }) {
-    const payment = await paymentRepository.findPendingPayment(params.orderId);
     const successPayment = await db.payment.findFirst({
       where: {
         orderId: params.orderId,
@@ -436,6 +528,10 @@ export const razorpayService = {
       },
     });
 
+    const isPartial = params.amount
+      ? Math.round(params.amount * 100) < Math.round(Number(successPayment.amount) * 100)
+      : false;
+
     // Record refund transaction
     await db.$transaction(async (tx) => {
       await tx.paymentTransaction.create({
@@ -450,201 +546,43 @@ export const razorpayService = {
         },
       });
 
+      await tx.refunds.create({
+        data: {
+          order_id: params.orderId,
+          payment_id: successPayment.id,
+          amount: refundAmountInPaise / 100,
+          reason: params.reason || "Refund processed by admin",
+          status: "completed",
+          processed_at: new Date(),
+          created_by: successPayment.created_by,
+          updated_by: successPayment.updated_by,
+        },
+      });
+
       await tx.payment.update({
         where: { id: successPayment.id },
         data: {
-          status: "refunded",
+          status: isPartial ? "success" : "refunded",
         },
       });
 
       await tx.order.update({
         where: { id: params.orderId },
         data: {
-          payment_status: "refunded",
+          payment_status: isPartial ? "partial_refund" : "refunded",
         },
       });
+
+      return {
+        success: true,
+        refundId: refund.id,
+        amount: refundAmountInPaise / 100,
+        isPartial,
+      };
     });
-
-    return refund;
-  },
-
-  // ─── Redirect Flow ───────────────────────────────────────────────────────────
-
-  /**
-   * Initiate a redirect-based payment: create a Razorpay order from the active
-   * cart and persist a one-time token the payment app will use to retrieve details.
-   * NO internal order is created here.
-   */
-  async initiateRedirectPayment(
-    sessionUserId: string,
-    input: { shippingAddressId: string; billingAddressId?: string; notes?: string }
-  ): Promise<{ paymentUrl: string; token: string }> {
-    const user = await userRepository.findById(sessionUserId);
-    if (!user || !user.internalId) throw ApiError.unauthorized("User not found");
-    if (!user.isActive || user.is_active === false)
-      throw ApiError.forbidden("Your account is inactive. Please contact support.");
-
-    const userId = user.internalId;
-
-    // 1. Compute amount from active cart
-    const cart = await cartService.getCart(sessionUserId);
-    if (!cart || cart.items.length === 0)
-      throw ApiError.badRequest("Your cart is empty. Please add items before checking out.");
-
-    const payableBeforeShipping = cart.total;
-    const shippingCharge = payableBeforeShipping >= 499 ? 0 : 49;
-    const payableAmount = payableBeforeShipping + shippingCharge;
-    if (payableAmount <= 0) throw ApiError.badRequest("Invalid cart amount.");
-
-    const amountInPaise = Math.round(payableAmount * 100);
-
-    // 2. Create Razorpay order
-    const razorpay = getRazorpayClient();
-    let rzpOrder: any;
-    try {
-      rzpOrder = await razorpay.orders.create({
-        amount: amountInPaise,
-        currency: "INR",
-        receipt: `REDIR_${Date.now().toString().slice(-8)}`,
-        notes: {
-          userId: String(userId),
-          checkoutType: "redirect",
-          shippingAddressId: input.shippingAddressId,
-        },
-      });
-    } catch (err: any) {
-      const description = err?.error?.description || err?.message || "Razorpay API error";
-      throw ApiError.badRequest(`Razorpay Error: ${description}`);
-    }
-
-    // 3. Generate one-time token
-    const token = crypto.randomBytes(32).toString("hex");
-    const expiresAt = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes
-
-    await paymentRepository.createPaymentToken({
-      token,
-      razorpayOrderId: rzpOrder.id,
-      internalOrderRef: "cart",
-      shippingAddressId: input.shippingAddressId,
-      billingAddressId: input.billingAddressId,
-      notes: input.notes,
-      amount: payableAmount,
-      currency: "INR",
-      orderNumber: undefined,
-      keyId: getRazorpayPublicKey(),
-      userId,
-      expiresAt,
-    });
-
-    // 4. Build redirect URL pointing to payment app
-    const paymentAppUrl =
-      process.env.PAYMENT_APP_URL || "http://localhost:3001";
-    const paymentUrl = `${paymentAppUrl}/?token=${token}`;
-
-    return { paymentUrl, token };
-  },
-
-  /**
-   * Verify Razorpay signature from the payment app redirect callback.
-   * Creates the internal order only after successful verification.
-   * Marks the one-time token as used.
-   */
-  async verifyRedirectPayment(input: {
-    token: string;
-    razorpay_order_id: string;
-    razorpay_payment_id: string;
-    razorpay_signature: string;
-  }): Promise<{ orderNumber: string; orderId: string; success: boolean }> {
-    // 1. Validate token
-    const tokenData = await paymentRepository.findValidToken(input.token);
-    if (!tokenData) {
-      throw ApiError.badRequest("Payment token is invalid, expired, or already used.");
-    }
-
-    // 2. Cryptographic signature verification
-    const secret = process.env.RAZORPAY_KEY_SECRET;
-    if (!secret) throw new Error("RAZORPAY_KEY_SECRET is not configured");
-
-    const expectedSignature = crypto
-      .createHmac("sha256", secret)
-      .update(`${input.razorpay_order_id}|${input.razorpay_payment_id}`)
-      .digest("hex");
-
-    if (expectedSignature !== input.razorpay_signature) {
-      throw ApiError.badRequest("Invalid payment signature. Verification rejected.");
-    }
-
-    // 3. Mark token as used immediately (prevent replay)
-    await paymentRepository.markTokenUsed(input.token);
-
-    // 4. Reconstruct sessionUserId from stored userId
-    const userRows = await db.$queryRaw<any[]>`
-      SELECT uuid FROM \`users\` WHERE id = ${tokenData.userId} LIMIT 1
-    `;
-    if (!userRows || userRows.length === 0) {
-      throw ApiError.unauthorized("User not found");
-    }
-    const sessionUserId = userRows[0].uuid as string;
-
-    // 5. Create internal order — only now, after verified payment
-    const createdOrder = await orderService.createCustomerOrder(sessionUserId, {
-      shippingAddressId: tokenData.shippingAddressId,
-      billingAddressId: tokenData.billingAddressId || tokenData.shippingAddressId,
-      notes: tokenData.notes || undefined,
-      paymentMethod: "CARD",
-      paymentDetails: {
-        gateway: "RAZORPAY",
-        isPaid: true,
-        razorpay_order_id: input.razorpay_order_id,
-        razorpay_payment_id: input.razorpay_payment_id,
-        razorpay_signature: input.razorpay_signature,
-      },
-    });
-
-    // 6. Record payment in DB
-    const dbOrder = await db.order.findFirst({
-      where: {
-        OR: [
-          { uuid: createdOrder.id },
-          { orderNumber: createdOrder.orderNumber },
-        ],
-      },
-      select: { id: true, uuid: true, orderNumber: true, totalAmount: true },
-    });
-
-    if (dbOrder) {
-      const paymentMethod = await paymentRepository.getOrCreatePaymentMethod(
-        "RAZORPAY",
-        "Razorpay Online Payment"
-      );
-      const paymentRecord = await paymentRepository.createPaymentRecord({
-        orderId: dbOrder.id,
-        paymentMethodId: paymentMethod.id,
-        amount: Number(dbOrder.totalAmount),
-        currency: "INR",
-        gatewayOrderId: input.razorpay_order_id,
-        createdBy: tokenData.userId,
-      });
-      await paymentRepository.recordPaymentSuccess({
-        paymentId: paymentRecord.id,
-        orderId: dbOrder.id,
-        userId: tokenData.userId,
-        razorpayPaymentId: input.razorpay_payment_id,
-        gatewayResponse: {
-          razorpay_order_id: input.razorpay_order_id,
-          razorpay_payment_id: input.razorpay_payment_id,
-          razorpay_signature: input.razorpay_signature,
-        },
-        amount: Number(dbOrder.totalAmount),
-      });
-    }
-
-    return {
-      success: true,
-      orderNumber: createdOrder.orderNumber,
-      orderId: createdOrder.id,
-    };
   },
 };
+
+export default razorpayService;
 
 

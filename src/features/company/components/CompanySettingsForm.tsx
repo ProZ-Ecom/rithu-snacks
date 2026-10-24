@@ -228,6 +228,7 @@ export function CompanySettingsForm() {
                 src={logoPreview}
                 alt="Company Logo"
                 fill
+                sizes="96px"
                 className="object-contain p-2"
               />
             ) : (

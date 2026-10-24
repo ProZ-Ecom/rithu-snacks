@@ -9,6 +9,10 @@ import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DataTable } from "@/components/admin/data-table/DataTable";
+import { BulkActionsBar } from "@/components/admin/data-table/BulkActionsBar";
+import { exportToExcel } from "@/lib/excel-export";
+import { ExportExcelButton } from "@/components/admin/ExportExcelButton";
+import { EXPORT_PRESETS } from "@/lib/export-presets";
 import { AdminTableSkeleton } from "@/components/admin/AdminTableSkeleton";
 import { ErrorState } from "@/components/ui/error-state";
 import {
@@ -24,6 +28,7 @@ import {
   useCreateBanner,
   useUpdateBanner,
   useDeleteBanner,
+  bannerApi,
 } from "@/features/banners/hooks";
 import { BannerForm } from "@/features/banners/components";
 import {
@@ -51,9 +56,14 @@ export default function AdminBannersPage() {
     title: string;
   } | null>(null);
 
+  const [selectedRowIds, setSelectedRowIds] = useState<Record<string, boolean>>({});
+  const [selectedRows, setSelectedRows] = useState<BannerDto[]>([]);
+
   useEffect(() => {
     setPage(1);
-  }, [search, selectedPositionFilter]);
+    setSelectedRowIds({});
+    setSelectedRows([]);
+  }, [search, selectedPositionFilter, page, pageSize]);
 
   // Main banners query
   const { data, isLoading, error, refetch } = useBanners({
@@ -331,10 +341,27 @@ export default function AdminBannersPage() {
               {hasActiveFilters && <ClearFiltersButton onClick={handleClearFilters} />}
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <ExportExcelButton
+                data={banners}
+                fetchData={async () => {
+                  const res = await bannerApi.getBanners({
+                    page: 1,
+                    limit: 10000,
+                    search: search.trim() || undefined,
+                    bannerPositionId: selectedPositionFilter || undefined,
+                  });
+                  return res?.data ?? [];
+                }}
+                totalCount={data?.meta?.total ?? banners.length}
+                filename="banners"
+                sheetName="Banners"
+                columns={EXPORT_PRESETS.banners}
+              />
+
               <Button
                 onClick={() => setIsCreateOpen(true)}
-                className="h-11 rounded-xl bg-[var(--color-secondary-600)] px-5 text-sm font-semibold text-white hover:bg-[var(--color-secondary-700)]"
+                className="h-11 rounded-xl bg-[var(--color-secondary-600)] px-5 text-sm font-semibold text-white hover:bg-[var(--color-secondary-700)] shadow-xs"
               >
                 <Plus className="mr-2 h-4 w-4" />
                 Add Banner
@@ -344,6 +371,24 @@ export default function AdminBannersPage() {
 
           {/* Data Table */}
           <div className="mt-6 flex-1 min-h-0 min-w-0 flex flex-col">
+            <BulkActionsBar
+              selectedCount={selectedRows.length}
+              entityName="banners"
+              filterNotice={search ? `Filtered by "${search}"` : undefined}
+              onClearSelection={() => {
+                setSelectedRowIds({});
+                setSelectedRows([]);
+              }}
+              onExport={() => {
+                exportToExcel({
+                  filename: "selected_banners",
+                  sheetName: "Selected Banners",
+                  data: selectedRows,
+                  columns: EXPORT_PRESETS.banners,
+                });
+              }}
+            />
+
             <DataTable
               columns={columns}
               data={banners}
@@ -357,6 +402,12 @@ export default function AdminBannersPage() {
                 setPageSize(newSize);
                 setPage(1);
               }}
+              selectedRowIds={selectedRowIds}
+              onRowSelectionChange={(newSelection, items) => {
+                setSelectedRowIds(newSelection);
+                setSelectedRows(items);
+              }}
+              getRowId={(row) => String(row.id)}
               className="bg-white"
             />
           </div>

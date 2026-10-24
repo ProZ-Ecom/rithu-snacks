@@ -41,12 +41,14 @@ export default function AdminDashboardPage() {
 
   const currentMonthName = new Date().toLocaleString("en-IN", { month: "long" });
   const lastMonthName = new Date(new Date().getFullYear(), new Date().getMonth() - 1, 1).toLocaleString("en-IN", { month: "long" });
+  const currentYear = new Date().getFullYear();
 
   const periodLabels: Record<TimePeriod, string> = {
     today: "Today",
     this_week: "This Week",
     this_month: `${currentMonthName} (This Month)`,
     last_month: `${lastMonthName} (Last Month)`,
+    this_year: `${currentYear} (This Year)`,
     custom: "Custom Range",
   };
 
@@ -179,10 +181,10 @@ export default function AdminDashboardPage() {
       />
 
       {/* Restock & Procurement Alerts (Low Stock Warning Cards) */}
-      <RestockAlertsSection alerts={dashboardData.restockAlerts} />
+      {/* <RestockAlertsSection alerts={dashboardData.restockAlerts} /> */}
 
       {/* Store Administration Shortcuts Toolbar */}
-      <AdminShortcutsBar />
+      {/* <AdminShortcutsBar /> */}
     </div>
   );
 }

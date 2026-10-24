@@ -103,6 +103,14 @@ export const deliveryRepository = {
                   avatar: true,
                 },
               },
+              delivery_partners: {
+                select: {
+                  id: true,
+                  name: true,
+                  code: true,
+                  contact_number: true,
+                },
+              },
             },
           },
         },

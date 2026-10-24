@@ -1,9 +1,9 @@
 "use client";
 
 import AuthFormLayout from "@/components/auth/AuthFormLayout";
-import { Suspense } from "react";
+import { Suspense, useState } from "react";
 import { signIn } from "next-auth/react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { FormProvider, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { loginSchema, type LoginInput } from "@/lib/validations/auth";
@@ -16,11 +16,23 @@ import { LockKeyhole, Mail, AlertCircle } from "lucide-react";
 import Link from "next/link";
 import { Checkbox } from "@/components/ui/checkbox";
 
+import { GoogleAuthButton } from "@/components/auth/GoogleAuthButton";
+
 function LoginForm() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get("callbackUrl") || "/";
+  const authError = searchParams.get("error");
   const loginMutation = useLogin();
+  const [isRedirecting, setIsRedirecting] = useState(false);
+  const isSubmitting = loginMutation.isPending || isRedirecting;
+
+  const getErrorMessage = (error: string | null) => {
+    if (!error) return null;
+    if (error === "AccessDenied") return "Your account has been deactivated or blocked.";
+    if (error === "OAuthCallbackError" || error === "OAuthSignin")
+      return "Failed to authenticate with Google. Please try again.";
+    return "Authentication failed. Please try again.";
+  };
 
   const methods = useForm<LoginInput>({
     resolver: zodResolver(loginSchema),
@@ -40,6 +52,7 @@ function LoginForm() {
       },
       {
         onSuccess: async () => {
+          setIsRedirecting(true);
           try {
             // Sync NextAuth session and redirect
             await signIn("credentials", {
@@ -50,10 +63,11 @@ function LoginForm() {
           } catch {
             // Cookie auth is primary fallback
           }
-          router.push(callbackUrl);
-          router.refresh();
+          // Hard navigation so the new session is picked up; loader stays on until the page unloads
+          window.location.assign(callbackUrl);
         },
         onError: (err: any) => {
+          setIsRedirecting(false);
           methods.setError("root", {
             type: "server",
             message:
@@ -87,18 +101,38 @@ function LoginForm() {
         </div>
       }
     >
-      <FormProvider {...methods}>
-        <form
-          onSubmit={methods.handleSubmit(onSubmit)}
-          className="space-y-5 md:space-y-6"
-        >
-          {/* Server Error */}
-          {methods.formState.errors.root?.message && (
-            <div className="flex items-center gap-2 rounded-lg border border-error-200 bg-error-50 p-3 text-sm text-error-600">
-              <AlertCircle className="h-4 w-4 shrink-0" />
-              {methods.formState.errors.root.message}
-            </div>
-          )}
+      <div className="space-y-4">
+        {/* URL Error (e.g. Google OAuth error) */}
+        {authError && (
+          <div className="flex items-center gap-2 rounded-lg border border-error-200 bg-error-50 p-3 text-sm text-error-600">
+            <AlertCircle className="h-4 w-4 shrink-0" />
+            {getErrorMessage(authError)}
+          </div>
+        )}
+
+        {/* Google One-Click Login */}
+        <GoogleAuthButton callbackUrl={callbackUrl} text="Continue with Google" />
+
+        {/* Divider */}
+        <div className="relative flex items-center justify-center py-1">
+          <div className="w-full border-t border-neutral-200" />
+          <span className="absolute bg-white px-3 text-xs font-medium uppercase tracking-wider text-neutral-400">
+            Or sign in with email
+          </span>
+        </div>
+
+        <FormProvider {...methods}>
+          <form
+            onSubmit={methods.handleSubmit(onSubmit)}
+            className="space-y-5 md:space-y-6"
+          >
+            {/* Server Error */}
+            {methods.formState.errors.root?.message && (
+              <div className="flex items-center gap-2 rounded-lg border border-error-200 bg-error-50 p-3 text-sm text-error-600">
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                {methods.formState.errors.root.message}
+              </div>
+            )}
 
           <FormInput
             name="email"
@@ -131,13 +165,14 @@ function LoginForm() {
 
           <FormSubmitButton
             size="xl"
-            disabled={loginMutation.isPending}
+            disabled={isSubmitting}
             className="mt-2 h-12 md:h-14 w-full rounded-lg bg-secondary-600 text-sm text-white hover:bg-secondary-700 cursor-pointer disabled:opacity-50"
           >
-            {loginMutation.isPending ? <Spinner size="sm" className="text-white" /> : "Sign In"}
+            {isSubmitting ? <Spinner size="sm" className="text-white" /> : "Sign In"}
           </FormSubmitButton>
         </form>
       </FormProvider>
+      </div>
     </AuthFormLayout>
   );
 }

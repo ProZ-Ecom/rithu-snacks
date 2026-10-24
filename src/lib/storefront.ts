@@ -59,6 +59,7 @@ export function mapVariantToStorefrontProduct(
     name: variant.productName || variant.variantName,
     image: imageUrl,
     outOfStock: variant.outOfStock,
+    isFeatured: Boolean(variant.isFeatured),
     unitPrices: (variant.unitPrices ?? []).map((up) => ({
       id: up.id,
       label: formatMeasurementLabel(up.measurement),

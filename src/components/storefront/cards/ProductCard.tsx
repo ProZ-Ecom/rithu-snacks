@@ -218,38 +218,27 @@ export function ProductCard({
         </Link>
 
         <div className="flex flex-col items-end shrink-0">
-          {isProduct && unitPrices.length > 0 && (
-            <div className="flex flex-wrap gap-1 justify-end">
-              {unitPrices.map((unitPrice) => (
-                <button
-                  key={unitPrice.id}
-                  type="button"
-                  onClick={() => setSelectedUnitPriceId(unitPrice.id)}
-                  className={`
-                    px-1
-                    sm:px-2
-                    py-[2px]
-                    text-[9px]
-                    sm:text-[10px]
-                    font-medium
-                    border
-                    cursor-pointer
-                    transition-all
-                    duration-300
-                    hover:scale-105
-                    rounded-xs
-                    ${
-                      selectedUnitPriceId === unitPrice.id
-                        ? "bg-[var(--brown-700)] text-white border-[var(--brown-700)]"
-                        : "bg-white text-[var(--brown-700)] border-[var(--brown-700)]"
-                    }
-                  `}
-                >
-                  {unitPrice.label}
-                </button>
-              ))}
+          {isProduct && selectedUnitPrice && (
+            <div className="flex justify-end">
+              <span
+                className="
+                  px-1
+                  sm:px-2
+                  py-[2px]
+                  text-[9px]
+                  sm:text-[10px]
+                  font-medium
+                  border
+                  rounded-xs
+                  bg-[var(--brown-700)] text-white border-[var(--brown-700)]
+                  select-none
+                "
+              >
+                {selectedUnitPrice.label}
+              </span>
             </div>
           )}
+
 
           {(isWishlist || isCart) && selectedUnitPrice && (
             <p className="mt-2 text-xs sm:text-sm text-gray-600">

@@ -52,6 +52,8 @@ const registerFormSchema = z
 
 type RegisterFormData = z.infer<typeof registerFormSchema>;
 
+import { GoogleAuthButton } from "@/components/auth/GoogleAuthButton";
+
 function RegisterForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -240,18 +242,30 @@ function RegisterForm() {
         </div>
       }
     >
-      <FormProvider {...methods}>
-        <form
-          onSubmit={methods.handleSubmit(onSubmit)}
-          className="space-y-5 md:space-y-6"
-        >
-          {/* Server Error */}
-          {methods.formState.errors.root?.message && (
-            <div className="flex items-center gap-2 rounded-lg border border-error-200 bg-error-50 p-3 text-sm text-error-600">
-              <AlertCircle className="h-4 w-4 shrink-0" />
-              {methods.formState.errors.root.message}
-            </div>
-          )}
+      <div className="space-y-4">
+        {/* Google One-Click Registration */}
+        <GoogleAuthButton callbackUrl={callbackUrl} text="Sign up with Google" />
+
+        {/* Divider */}
+        <div className="relative flex items-center justify-center py-1">
+          <div className="w-full border-t border-neutral-200" />
+          <span className="absolute bg-white px-3 text-xs font-medium uppercase tracking-wider text-neutral-400">
+            Or register with email
+          </span>
+        </div>
+
+        <FormProvider {...methods}>
+          <form
+            onSubmit={methods.handleSubmit(onSubmit)}
+            className="space-y-5 md:space-y-6"
+          >
+            {/* Server Error */}
+            {methods.formState.errors.root?.message && (
+              <div className="flex items-center gap-2 rounded-lg border border-error-200 bg-error-50 p-3 text-sm text-error-600">
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                {methods.formState.errors.root.message}
+              </div>
+            )}
 
           <FormInput
             name="name"
@@ -363,6 +377,7 @@ function RegisterForm() {
           </FormSubmitButton>
         </form>
       </FormProvider>
+      </div>
     </AuthFormLayout>
   );
 }

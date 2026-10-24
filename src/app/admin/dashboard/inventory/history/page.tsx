@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { ColumnDef } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
 import { AdminTableSkeleton } from "@/components/admin/AdminTableSkeleton";
@@ -11,9 +11,14 @@ import {
   AdminContent,
 } from "@/components/admin/AdminPageHeader";
 import { DataTable } from "@/components/admin/data-table/DataTable";
+import { BulkActionsBar } from "@/components/admin/data-table/BulkActionsBar";
+import { ExportExcelButton } from "@/components/admin/ExportExcelButton";
+import { exportToExcel } from "@/lib/excel-export";
+import { EXPORT_PRESETS } from "@/lib/export-presets";
 import { ClearFiltersButton } from "@/components/common/clear-filters-button";
 import { Select } from "@/components/ui/select";
 import { useInventoryTransactions } from "@/features/inventory/hooks";
+import { getTransactions } from "@/features/inventory/api/get-inventory";
 import { formatDate } from "@/lib/utils";
 import type { InventoryTransactionItem } from "@/features/inventory/types";
 
@@ -70,6 +75,15 @@ export default function InventoryHistoryPage() {
     type?: string;
   }>({ page: 1, limit: 20 });
 
+  // Bulk Selection State
+  const [selectedRowIds, setSelectedRowIds] = useState<Record<string, boolean>>({});
+  const [selectedRows, setSelectedRows] = useState<InventoryTransactionItem[]>([]);
+
+  useEffect(() => {
+    setSelectedRowIds({});
+    setSelectedRows([]);
+  }, [inventoryId, params]);
+
   const { data, isLoading, error } = useInventoryTransactions(
     inventoryId,
     params
@@ -111,7 +125,7 @@ export default function InventoryHistoryPage() {
               onChange={(e) => setInventoryId(e.target.value)}
             />
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <label className="text-xs font-semibold text-neutral-600 whitespace-nowrap">Filter by type:</label>
             <Select
               className="w-40"
@@ -134,15 +148,57 @@ export default function InventoryHistoryPage() {
                 { value: "TRANSFER", label: "Transfer" },
               ]}
             />
+
+            <ExportExcelButton
+              data={transactionData}
+              fetchData={
+                inventoryId.trim()
+                  ? async () => {
+                      const res = await getTransactions(inventoryId, {
+                        ...params,
+                        page: 1,
+                        limit: 10000,
+                      });
+                      return res?.data?.data ?? [];
+                    }
+                  : undefined
+              }
+              filename="inventory_history"
+              sheetName="Inventory History"
+              columns={EXPORT_PRESETS.inventoryHistory}
+            />
           </div>
 
           {hasActiveFilters && <ClearFiltersButton onClick={handleClearFilters} />}
         </div>
 
         <div className="flex-1 min-h-0 min-w-0 flex flex-col">
+          <BulkActionsBar
+            selectedCount={selectedRows.length}
+            entityName="transaction"
+            onClearSelection={() => {
+              setSelectedRowIds({});
+              setSelectedRows([]);
+            }}
+            onExport={() => {
+              exportToExcel({
+                filename: "selected_inventory_history",
+                sheetName: "Selected History",
+                data: selectedRows,
+                columns: EXPORT_PRESETS.inventoryHistory,
+              });
+            }}
+          />
+
           <DataTable
             columns={columns}
             data={transactionData}
+            selectedRowIds={selectedRowIds}
+            onRowSelectionChange={(newSelection, items) => {
+              setSelectedRowIds(newSelection);
+              setSelectedRows(items);
+            }}
+            getRowId={(row) => String(row.id)}
             className="bg-white border border-neutral-200"
           />
         </div>

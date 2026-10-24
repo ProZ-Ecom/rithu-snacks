@@ -240,3 +240,52 @@ export async function getCheckoutSummary(
   return response.data!;
 }
 
+export interface DeliveryPartnerItem {
+  id: string;
+  name: string;
+  code: string;
+  contactNumber: string | null;
+  isActive: boolean;
+}
+
+export interface ShipOrderCourierPayload {
+  deliveryPartnerId: string | number;
+  trackingNumber: string;
+  notes?: string;
+  invoiceNumber?: number;
+}
+
+export interface NextInvoiceNumber {
+  invoiceNumber: number;
+  financialYear: string | null;
+  /** True when the order already has a number; it cannot be changed. */
+  locked: boolean;
+}
+
+export async function getNextInvoiceNumber(
+  orderRef?: string | null
+): Promise<NextInvoiceNumber> {
+  const query = orderRef ? `?order=${encodeURIComponent(orderRef)}` : "";
+  const response = await apiClient.get<NextInvoiceNumber>(
+    `/api/admin/orders/next-invoice-number${query}`
+  );
+  return response.data!;
+}
+
+export async function getDeliveryPartners(): Promise<DeliveryPartnerItem[]> {
+  const response = await apiClient.get<DeliveryPartnerItem[]>("/api/admin/delivery/partners");
+  return response.data || [];
+}
+
+export async function shipOrderCourier(
+  uuid: string | number,
+  payload: ShipOrderCourierPayload
+): Promise<OrderDetailResponse> {
+  const response = await apiClient.post<OrderDetailResponse>(
+    `/api/admin/orders/${uuid}/ship`,
+    payload
+  );
+  return response.data!;
+}
+
+
