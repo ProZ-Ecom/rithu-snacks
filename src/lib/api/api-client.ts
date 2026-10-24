@@ -141,19 +141,33 @@ async function fetchApi<T>(
       }
     }
 
-    // Refresh didn't help — for GET query requests, redirect to login so the user isn't stuck on an empty state.
-    // For mutations (POST, PUT, PATCH, DELETE), let it throw ApiClientError so the UI catches it with toast error instead of reloading the page.
+    // Refresh didn't help. Only redirect if the user is currently on a protected route that requires authentication.
+    // Public routes (such as '/', '/products', '/categories', etc.) must NEVER redirect or reload the window on a 401.
     const isMutation = Boolean(fetchOptions.method && fetchOptions.method !== "GET");
     if (!refreshed && !isMutation && typeof window !== "undefined") {
-      const isAdminEndpoint = endpoint.startsWith("/api/admin/");
-      const loginPath = isAdminEndpoint ? "/admin/login" : "/login";
-      if (!window.location.pathname.startsWith(loginPath)) {
+      const currentPath = window.location.pathname;
+      const isAdminRoute = currentPath.startsWith("/admin") && !currentPath.startsWith("/admin/login");
+      const protectedCustomerRoutes = [
+        "/cart",
+        "/checkout",
+        "/orders",
+        "/profile",
+        "/wishlist",
+      ];
+      const isProtectedCustomerRoute = protectedCustomerRoutes.some(
+        (p) => currentPath === p || currentPath.startsWith(`${p}/`)
+      );
+
+      if (isAdminRoute) {
         const callbackUrl = encodeURIComponent(
-          window.location.pathname + window.location.search
+          currentPath + window.location.search
         );
-        window.location.href = isAdminEndpoint
-          ? loginPath
-          : `${loginPath}?callbackUrl=${callbackUrl}`;
+        window.location.href = `/admin/login?callbackUrl=${callbackUrl}`;
+      } else if (isProtectedCustomerRoute) {
+        const callbackUrl = encodeURIComponent(
+          currentPath + window.location.search
+        );
+        window.location.href = `/login?callbackUrl=${callbackUrl}`;
       }
     }
   }
