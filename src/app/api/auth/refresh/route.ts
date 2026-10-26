@@ -6,6 +6,9 @@ import { authService } from "@/features/auth/services/auth.service";
 import { auth } from "@/lib/auth/config";
 import { userRepository } from "@/features/users/repositories/user.repository";
 import { generateAccessToken, generateRefreshToken } from "@/lib/auth/jwt";
+import { auth } from "@/lib/auth/config";
+import { userRepository } from "@/features/users/repositories/user.repository";
+import { generateAccessToken, generateRefreshToken } from "@/lib/auth/jwt";
 
 const IS_PROD = process.env.NODE_ENV === "production";
 
@@ -27,7 +30,19 @@ export const POST = createApiHandler(
       if (refreshToken) {
         try {
           const result = await authService.refreshAccessToken(refreshToken);
+      if (refreshToken) {
+        try {
+          const result = await authService.refreshAccessToken(refreshToken);
 
+          if (result.accessToken) {
+            cookieStore.set("access_token", result.accessToken, {
+              httpOnly: true,
+              secure: IS_PROD,
+              sameSite: "lax",
+              path: "/",
+              maxAge: 15 * 60, // 15 minutes
+            });
+          }
           if (result.accessToken) {
             cookieStore.set("access_token", result.accessToken, {
               httpOnly: true,

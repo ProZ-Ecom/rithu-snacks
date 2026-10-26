@@ -82,6 +82,7 @@ function toVariantListItemDto(
     variant_name: string | null;
     out_of_stock?: boolean;
     is_featured?: boolean;
+    is_featured?: boolean;
     ingredients?: string | null;
     is_ready_to_mix?: boolean;
     cooking_recipe?: string | null;
@@ -140,6 +141,7 @@ function toVariantListItemDto(
       isPrimary: Boolean((img as { is_primary?: boolean }).is_primary ?? (idx === 0)),
     })),
     outOfStock: Boolean(variant.out_of_stock),
+    isFeatured: Boolean(variant.is_featured),
     isFeatured: Boolean(variant.is_featured),
     ingredients: variant.ingredients ?? null,
     isReadyToMix: Boolean(variant.is_ready_to_mix),
@@ -994,6 +996,11 @@ export const catalogRepository = {
       where.is_featured = params.isFeatured;
     }
 
+    // Featured filter
+    if (params.isFeatured !== undefined) {
+      where.is_featured = params.isFeatured;
+    }
+
     // In Stock / Out of Stock filter
     if (params.inStock !== undefined) {
       where.out_of_stock = !params.inStock;
@@ -1037,6 +1044,7 @@ export const catalogRepository = {
       vegCount,
       nonVegCount,
       veganCount,
+      featuredCount,
       featuredCount,
     ] = await Promise.all([
       db.productVariant.findMany({

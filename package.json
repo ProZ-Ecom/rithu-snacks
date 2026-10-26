@@ -15,7 +15,10 @@
     "db:migrate": "node scripts/db-sync.cjs",
     "db:seed": "node --experimental-strip-types prisma/seed.ts",
     "seed:orders": "node --experimental-strip-types scripts/seed-last-month-orders.ts",
+<<<<<<< HEAD
     "email:test": "node scripts/test-email.mjs",
+=======
+>>>>>>> origin/dev
     "db:studio": "prisma studio"
   },
   "dependencies": {
