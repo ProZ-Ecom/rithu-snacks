@@ -111,6 +111,12 @@ export default auth(async (req) => {
   }
 
   if ((pathname === "/login" || pathname === "/register") && isAuthenticated) {
+    // If the user arrived with a callbackUrl (e.g. redirected due to 401 / expired session) or auth error,
+    // do not force-redirect away; allow them to view the login form and re-authenticate.
+    if (req.nextUrl.searchParams.has("callbackUrl") || req.nextUrl.searchParams.has("error")) {
+      return applyCookies(NextResponse.next());
+    }
+
     const url = req.nextUrl.clone();
     url.search = "";
     if (userRole === "ADMIN" || userRole === "STAFF") {

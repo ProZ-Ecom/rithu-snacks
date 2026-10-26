@@ -1,9 +1,9 @@
 "use client";
 
 import AuthFormLayout from "@/components/auth/AuthFormLayout";
-import { Suspense } from "react";
+import { Suspense, useState } from "react";
 import { signIn } from "next-auth/react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { FormProvider, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { loginSchema, type LoginInput } from "@/lib/validations/auth";
@@ -19,11 +19,12 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { GoogleAuthButton } from "@/components/auth/GoogleAuthButton";
 
 function LoginForm() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get("callbackUrl") || "/";
   const authError = searchParams.get("error");
   const loginMutation = useLogin();
+  const [isRedirecting, setIsRedirecting] = useState(false);
+  const isSubmitting = loginMutation.isPending || isRedirecting;
 
   const getErrorMessage = (error: string | null) => {
     if (!error) return null;
@@ -51,6 +52,7 @@ function LoginForm() {
       },
       {
         onSuccess: async () => {
+          setIsRedirecting(true);
           try {
             // Sync NextAuth session and redirect
             await signIn("credentials", {
@@ -61,10 +63,11 @@ function LoginForm() {
           } catch {
             // Cookie auth is primary fallback
           }
-          router.push(callbackUrl);
-          router.refresh();
+          // Hard navigation so the new session is picked up; loader stays on until the page unloads
+          window.location.assign(callbackUrl);
         },
         onError: (err: any) => {
+          setIsRedirecting(false);
           methods.setError("root", {
             type: "server",
             message:
@@ -162,10 +165,10 @@ function LoginForm() {
 
           <FormSubmitButton
             size="xl"
-            disabled={loginMutation.isPending}
+            disabled={isSubmitting}
             className="mt-2 h-12 md:h-14 w-full rounded-lg bg-secondary-600 text-sm text-white hover:bg-secondary-700 cursor-pointer disabled:opacity-50"
           >
-            {loginMutation.isPending ? <Spinner size="sm" className="text-white" /> : "Sign In"}
+            {isSubmitting ? <Spinner size="sm" className="text-white" /> : "Sign In"}
           </FormSubmitButton>
         </form>
       </FormProvider>

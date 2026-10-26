@@ -13,6 +13,9 @@ import {
   Loader2,
   RotateCcw,
   PackagePlus,
+  FolderTree,
+  Package,
+  Layers,
 } from "lucide-react";
 import { AdminPageHeader, AdminContent } from "@/components/admin/AdminPageHeader";
 import { AdminBreadcrumb } from "@/components/admin/AdminBreadcrumb";
@@ -47,7 +50,52 @@ interface PreviewItem {
   }[];
 }
 
+type ImportType = "categories" | "products" | "variants";
+
+interface PreviewCategory {
+  name: string;
+  code: string;
+  parentName?: string;
+  description?: string;
+  sortOrder: number;
+}
+
+const IMPORT_TYPES: {
+  key: ImportType;
+  step: number;
+  label: string;
+  description: string;
+  icon: React.ReactNode;
+  unit: string;
+}[] = [
+  {
+    key: "categories",
+    step: 1,
+    label: "Categories",
+    description: "Create categories and sub-categories first",
+    icon: <FolderTree className="w-4 h-4" />,
+    unit: "categories",
+  },
+  {
+    key: "products",
+    step: 2,
+    label: "Products",
+    description: "Add products into existing categories",
+    icon: <Package className="w-4 h-4" />,
+    unit: "products",
+  },
+  {
+    key: "variants",
+    step: 3,
+    label: "Variants & Pricing",
+    description: "Add items, pack sizes, prices and stock to existing products",
+    icon: <Layers className="w-4 h-4" />,
+    unit: "pack sizes",
+  },
+];
+
 interface ImportData {
+  previewCategories?: PreviewCategory[];
   totalRows: number;
   successCount: number;
   rejectedCount: number;
@@ -123,6 +171,7 @@ function CollapsibleSection({
 
 export default function BulkImportPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [importType, setImportType] = useState<ImportType>("categories");
   const [file, setFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
 
@@ -162,7 +211,7 @@ export default function BulkImportPage() {
     try {
       const fd = new FormData();
       fd.append("file", file);
-      const res = await fetch("/api/admin/import/products?preview=true", {
+      const res = await fetch(`/api/admin/import/products?type=${importType}&preview=true`, {
         method: "POST",
         body: fd,
         credentials: "include",
@@ -188,7 +237,7 @@ export default function BulkImportPage() {
     try {
       const fd = new FormData();
       fd.append("file", file);
-      const res = await fetch("/api/admin/import/products", {
+      const res = await fetch(`/api/admin/import/products?type=${importType}`, {
         method: "POST",
         body: fd,
         credentials: "include",
@@ -216,29 +265,47 @@ export default function BulkImportPage() {
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
+  const handleSelectType = (t: ImportType) => {
+    if (t === importType) return;
+    setImportType(t);
+    handleReset();
+  };
+
   // ─── Template Download ───
   const handleDownloadTemplate = async () => {
     try {
-      const res = await fetch("/api/admin/import/template");
+      const res = await fetch(`/api/admin/import/template?type=${importType}`);
+      if (!res.ok) throw new Error(`Template request failed (${res.status})`);
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = "rithu_snacks_catalog_import_template.xlsx";
+      a.download = `rithu_snacks_${importType}_import_template.xlsx`;
+      document.body.appendChild(a);
       a.click();
-      URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch {
       setErrorMsg("Failed to download template file.");
+      setStage("error");
     }
   };
 
   const activeData = importData ?? previewData;
+  const activeType = IMPORT_TYPES.find((t) => t.key === importType)!;
+  const importedCount =
+    importType === "categories"
+      ? importData?.importedCategories.length ?? 0
+      : importType === "products"
+        ? importData?.importedProducts.length ?? 0
+        : importData?.successCount ?? 0;
+  const confirmCount = previewData?.successCount ?? 0;
 
   return (
     <div className="space-y-6">
       <AdminPageHeader
-        title="Bulk Product Import"
-        description="Import categories, products, and multi-size variants from a single Excel file (.xlsx)"
+        title="Bulk Import"
+        description="Import categories, products, and variants one at a time from separate Excel files (.xlsx)"
         // breadcrumbs={
         //   <AdminBreadcrumb
         //     items={[
@@ -256,13 +323,47 @@ export default function BulkImportPage() {
             className="gap-2 text-xs cursor-pointer"
           >
             <Download className="w-3.5 h-3.5" />
-            Download Template
+            Download {activeType.label} Template
           </Button>
         }
       />
 
       <AdminContent>
         <div className="w-full space-y-6">
+          {/* ─── Import type selector ─── */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {IMPORT_TYPES.map((t) => {
+              const active = t.key === importType;
+              const busy = stage === "previewing" || stage === "importing";
+              return (
+                <button
+                  key={t.key}
+                  type="button"
+                  disabled={busy}
+                  onClick={() => handleSelectType(t.key)}
+                  className={`text-left rounded-xl border p-4 transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-60 ${
+                    active
+                      ? "border-amber-500 bg-amber-50 ring-1 ring-amber-400"
+                      : "border-neutral-200 bg-white hover:border-amber-300"
+                  }`}
+                >
+                  <div className="flex items-center gap-2 text-sm font-bold text-neutral-800">
+                    <span
+                      className={`flex h-6 w-6 items-center justify-center rounded-full text-xs ${
+                        active ? "bg-amber-500 text-white" : "bg-neutral-100 text-neutral-500"
+                      }`}
+                    >
+                      {t.step}
+                    </span>
+                    {t.icon}
+                    {t.label}
+                  </div>
+                  <p className="mt-1.5 text-xs text-neutral-500">{t.description}</p>
+                </button>
+              );
+            })}
+          </div>
+
           {/* ─── Upload Zone ─── */}
           {stage === "idle" || stage === "error" ? (
             <div
@@ -302,7 +403,7 @@ export default function BulkImportPage() {
                 <>
                   <Upload className="w-10 h-10 text-neutral-400 mb-3" />
                   <p className="text-sm font-semibold text-neutral-700">
-                    Drag & drop your Excel file here
+                    Drag & drop your {activeType.label} Excel file here
                   </p>
                   <p className="text-xs text-neutral-400 mt-1">
                     or click to browse • Only .xlsx supported
@@ -365,9 +466,7 @@ export default function BulkImportPage() {
                       Import Completed Successfully!
                     </p>
                     <p className="text-xs text-emerald-600">
-                      {importData?.importedProducts.length ?? 0} products and{" "}
-                      {importData?.importedCategories.length ?? 0} categories added to the
-                      database.
+                      {importedCount} {activeType.unit} added to the database.
                     </p>
                   </div>
                 </div>
@@ -402,8 +501,12 @@ export default function BulkImportPage() {
                   color="red"
                 />
                 <StatBadge
-                  label="Products"
-                  value={activeData.preview.length}
+                  label={activeType.label}
+                  value={
+                    importType === "categories"
+                      ? activeData.previewCategories?.length ?? 0
+                      : activeData.preview.length
+                  }
                   color="amber"
                 />
               </div>
@@ -449,10 +552,45 @@ export default function BulkImportPage() {
                 </CollapsibleSection>
               )}
 
+              {/* Categories preview */}
+              {importType === "categories" &&
+                (activeData.previewCategories?.length ?? 0) > 0 && (
+                  <CollapsibleSection
+                    title="Categories to Import"
+                    count={activeData.previewCategories!.length}
+                    colorClass="bg-emerald-50 text-emerald-700"
+                    icon={<CheckCircle2 className="w-4 h-4" />}
+                    defaultOpen={true}
+                  >
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="border-b border-neutral-100 bg-neutral-50 text-neutral-500">
+                            <th className="text-left px-4 py-2 font-semibold">Name</th>
+                            <th className="text-left px-4 py-2 font-semibold">Code</th>
+                            <th className="text-left px-4 py-2 font-semibold">Parent</th>
+                            <th className="text-left px-4 py-2 font-semibold">Sort</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {activeData.previewCategories!.map((c, i) => (
+                            <tr key={i} className="border-b border-neutral-50">
+                              <td className="px-4 py-2 font-semibold text-neutral-700">{c.name}</td>
+                              <td className="px-4 py-2 font-mono text-neutral-500">{c.code}</td>
+                              <td className="px-4 py-2 text-neutral-500">{c.parentName || "—"}</td>
+                              <td className="px-4 py-2 text-neutral-500">{c.sortOrder}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </CollapsibleSection>
+                )}
+
               {/* Success Preview */}
-              {activeData.preview.length > 0 && (
+              {importType !== "categories" && activeData.preview.length > 0 && (
                 <CollapsibleSection
-                  title="Products to Import"
+                  title={importType === "products" ? "Products to Import" : "Pack Sizes to Import"}
                   count={activeData.preview.length}
                   colorClass="bg-emerald-50 text-emerald-700"
                   icon={<CheckCircle2 className="w-4 h-4" />}
@@ -473,10 +611,14 @@ export default function BulkImportPage() {
                                   {" • "}Code: <span className="font-mono font-semibold">{prod.productCode}</span>
                                 </>
                               )}
-                              {" • "}Category:{" "}
-                              <span className="font-semibold text-emerald-600">
-                                {prod.categoryName}
-                              </span>
+                              {prod.categoryName && (
+                                <>
+                                  {" • "}Category:{" "}
+                                  <span className="font-semibold text-emerald-600">
+                                    {prod.categoryName}
+                                  </span>
+                                </>
+                              )}
                               {prod.brand && (
                                 <>
                                   {" • "}Brand: <span className="font-medium text-neutral-600">{prod.brand}</span>
@@ -484,9 +626,11 @@ export default function BulkImportPage() {
                               )}
                             </p>
                           </div>
-                          <span className="shrink-0 px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-bold">
-                            {prod.variants.length} variant{prod.variants.length !== 1 ? "s" : ""}
-                          </span>
+                          {importType === "variants" && (
+                            <span className="shrink-0 px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-bold">
+                              {prod.variants.length} pack size{prod.variants.length !== 1 ? "s" : ""}
+                            </span>
+                          )}
                         </div>
                         {prod.variants.length > 0 && (
                           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 mt-2">
@@ -551,15 +695,13 @@ export default function BulkImportPage() {
 
               {/* Action Buttons */}
               <div className="flex gap-3 pt-2">
-                {stage === "preview_done" &&
-                  previewData &&
-                  previewData.preview.length > 0 && (
+                {stage === "preview_done" && confirmCount > 0 && (
                     <Button
                       onClick={handleImport}
                       className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2 cursor-pointer"
                     >
                       <PackagePlus className="w-4 h-4" />
-                      Confirm Import ({previewData.preview.length} products)
+                      Confirm Import ({confirmCount} {activeType.unit})
                     </Button>
                   )}
                 <Button

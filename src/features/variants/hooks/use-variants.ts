@@ -24,6 +24,7 @@ export function useCustomerVariants(params?: CustomerGlobalVariantListParams) {
     brandIds: params?.brandIds?.length ? params.brandIds.join(",") : undefined,
     productIds: params?.productIds?.length ? params.productIds.join(",") : undefined,
     isFeatured: params?.isFeatured,
+    skipFacets: params?.skipFacets,
     sortBy: params?.sortBy ?? "createdAt",
     sortOrder: params?.sortOrder ?? "desc",
     isActive:false

@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { runSTCourierSyncCronJob } from "@/features/orders/services/order-tracking-sync.service";
 import { auth } from "@/lib/auth";
 
+export const dynamic = "force-dynamic";
+
 async function handleSync(request: NextRequest) {
   try {
     // 1. Authorization check

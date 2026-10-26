@@ -3,6 +3,7 @@ import { ApiError } from "@/lib/api/api-error";
 import { userRepository } from "@/features/users/repositories/user.repository";
 import { offerService } from "@/features/offers/services/offer.service";
 import { couponService } from "@/features/coupons/services/coupon.service";
+import { invoiceService } from "@/features/invoice/services/invoice.service";
 import { orderRepository } from "../repositories/order.repository";
 import type {
   OrderDetailResponse,
@@ -677,6 +678,9 @@ export const orderService = {
     const cleanNotes = input.notes?.trim() || null;
 
     await db.$transaction(async (tx) => {
+      // The invoice is issued when the goods leave, so it is numbered here.
+      await invoiceService.assignInvoiceNumber(tx, order, input.invoiceNumber);
+
       // Find active shipment for this order
       const existingShipment = await tx.shipments.findFirst({
         where: {

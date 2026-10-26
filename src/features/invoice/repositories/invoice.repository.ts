@@ -1,7 +1,46 @@
 import crypto from "crypto";
+import type { Prisma } from "@/generated/prisma";
 import { db } from "@/lib/db/prisma";
 
+type Db = Prisma.TransactionClient | typeof db;
+
 export const invoiceRepository = {
+  /** Highest invoice number used in a financial year, so the next one can be suggested. */
+  async getLastInvoiceNumber(financialYear: string, client: Db = db) {
+    const result = await client.order.aggregate({
+      where: { invoiceFinancialYear: financialYear },
+      _max: { invoiceNumber: true },
+    });
+    return result._max.invoiceNumber ?? 0;
+  },
+
+  /** Matches by uuid, orderNumber, or numeric id, like findOrderForInvoice. */
+  findOrderInvoiceNumber(orderRef: string) {
+    const isNumeric = /^\d+$/.test(orderRef);
+    return db.order.findFirst({
+      where: {
+        is_active: true,
+        OR: [
+          { uuid: orderRef },
+          { orderNumber: orderRef },
+          ...(isNumeric ? [{ id: BigInt(orderRef) }] : []),
+        ],
+      },
+      select: { invoiceNumber: true, invoiceFinancialYear: true },
+    });
+  },
+
+  findInvoiceNumberOwner(
+    financialYear: string,
+    invoiceNumber: number,
+    client: Db = db
+  ) {
+    return client.order.findFirst({
+      where: { invoiceFinancialYear: financialYear, invoiceNumber },
+      select: { id: true },
+    });
+  },
+
   /**
    * Loads everything a GST tax invoice needs for one order: the line items with
    * their HSN code and GST slab, plus the billing/shipping addresses.

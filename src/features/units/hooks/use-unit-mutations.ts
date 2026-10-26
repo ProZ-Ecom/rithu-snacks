@@ -13,6 +13,7 @@ export function useCreateUnit() {
 
   return useMutation({
     mutationFn: (data: Record<string, unknown>) => createUnit(data),
+    meta: { successMessage: "Unit created successfully" },
 
     onSuccess: () => {
       queryClient.invalidateQueries({
@@ -33,6 +34,7 @@ export function useUpdateUnit() {
       uuid: string;
       data: Record<string, unknown>;
     }) => updateUnit(uuid, data),
+    meta: { successMessage: "Unit updated successfully" },
 
     onSuccess: (_result, variables) => {
       queryClient.invalidateQueries({
@@ -51,6 +53,7 @@ export function useDeleteUnit() {
 
   return useMutation({
     mutationFn: (uuid: string) => deleteUnit(uuid),
+    meta: { successMessage: "Unit deleted successfully" },
 
     onSuccess: () => {
       queryClient.invalidateQueries({

@@ -19,6 +19,7 @@ import {
   assignOrderDelivery,
   getCheckoutSummary,
   getDeliveryPartners,
+  getNextInvoiceNumber,
   shipOrderCourier,
   type AssignDeliveryInput,
   type ShipOrderCourierPayload,
@@ -223,6 +224,17 @@ export function useDeliveryPartners() {
     queryKey: ["admin", "delivery-partners"],
     queryFn: () => getDeliveryPartners(),
     staleTime: 1000 * 60 * 5, // 5 minutes cache
+  });
+}
+
+/** Suggested invoice number for the ship dialog; always fetched fresh. */
+export function useNextInvoiceNumber(orderRef: string | null, enabled: boolean) {
+  return useQuery({
+    queryKey: ["admin-orders", "next-invoice-number", orderRef ?? ""] as const,
+    queryFn: () => getNextInvoiceNumber(orderRef),
+    enabled: enabled && !!orderRef,
+    staleTime: 0,
+    gcTime: 0,
   });
 }
 

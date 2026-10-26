@@ -1,11 +1,161 @@
 import { NextResponse } from "next/server";
 import * as XLSX from "xlsx";
 
+type SingleTemplate = "categories" | "products" | "variants";
+
+const SINGLE_TEMPLATES: Record<
+  SingleTemplate,
+  {
+    sheet: string;
+    file: string;
+    headers: string[];
+    rows: (string | number)[][];
+    notes: string[];
+    widths: number[];
+  }
+> = {
+  categories: {
+    sheet: "Categories",
+    file: "rithu_snacks_categories_import_template.xlsx",
+    headers: [
+      "category_name",
+      "category_code",
+      "parent_category",
+      "category_description",
+      "category_image",
+      "category_sort_order",
+    ],
+    rows: [
+      ["Traditional Snacks", "TRAD_SNACKS", "", "Authentic South Indian savoury snacks", "", 1],
+      ["Murukku", "TRAD_MURUKKU", "Traditional Snacks", "Handmade crunchy murukku", "", 1],
+      ["Traditional Sweets", "TRAD_SWEETS", "", "Melt-in-mouth sweets made with pure ghee", "", 2],
+    ],
+    notes: [
+      "CATEGORIES IMPORT – step 1 of 3 (Categories -> Products -> Variants)",
+      "",
+      "• category_name         [REQUIRED]  Max 150 chars. Must not already exist.",
+      "• category_code         [OPTIONAL]  Letters, numbers, underscores only. Auto-generated if empty. Max 170 chars.",
+      "• parent_category       [OPTIONAL]  Name of the parent. Must already exist, or be listed ABOVE this row in the same sheet.",
+      "• category_description [OPTIONAL]  Max 2000 chars.",
+      "• category_image        [OPTIONAL]  URL or path. Max 500 chars.",
+      "• category_sort_order   [OPTIONAL]  Integer 0 to 100.",
+    ],
+    widths: [28, 20, 24, 40, 24, 20],
+  },
+  products: {
+    sheet: "Products",
+    file: "rithu_snacks_products_import_template.xlsx",
+    headers: [
+      "product_name",
+      "product_sku",
+      "product_code",
+      "category_name",
+      "brand",
+      "hsn_code",
+      "product_description",
+      "product_image",
+    ],
+    rows: [
+      ["Traditional Kai Murukku", "RS-MUR-001", "TRAD_MUR_KAI_001", "Murukku", "Rithu Snacks", "1905", "Handmade crispy rice & urad dal murukku", ""],
+      ["Special Madras Mixture", "RS-MIX-002", "TRAD_MIX_MADRAS_002", "Traditional Snacks", "Rithu Snacks", "1905", "Crunchy savoury mixture with peanuts and boondi", ""],
+    ],
+    notes: [
+      "PRODUCTS IMPORT – step 2 of 3 (Categories -> Products -> Variants)",
+      "Categories must already exist. Variants (pack sizes & prices) are imported separately.",
+      "",
+      "• product_name        [REQUIRED]  Max 200 chars.",
+      "• product_sku         [REQUIRED]  Unique across all products. Max 100 chars.",
+      "• product_code        [OPTIONAL]  Unique. Auto-generated from SKU if empty. Max 220 chars.",
+      "• category_name       [REQUIRED]  Must match an existing category name.",
+      "• brand               [OPTIONAL]  Must exist in Brands; defaults to the first active brand.",
+      "• hsn_code            [OPTIONAL]  Max 20 chars.",
+      "• product_description [OPTIONAL]  Max 2000 chars.",
+      "• product_image       [OPTIONAL]  URL or path. Max 500 chars.",
+    ],
+    widths: [30, 16, 24, 26, 16, 12, 45, 24],
+  },
+  variants: {
+    sheet: "Variants",
+    file: "rithu_snacks_variants_import_template.xlsx",
+    headers: [
+      "product_sku",
+      "item_name",
+      "item_code",
+      "veg_type",
+      "shelf_life",
+      "is_featured",
+      "is_ready_to_mix",
+      "cooking_recipe",
+      "short_description",
+      "item_description",
+      "ingredients",
+      "item_image",
+      "unit_value",
+      "unit",
+      "variant_sku",
+      "price",
+      "stock_qty",
+      "reorder_level",
+      "is_default",
+    ],
+    rows: [
+      ["RS-MUR-001", "Standard Pouch", "MUR_KAI_STD_POUCH", "veg", "60 Days", "YES", "NO", "", "Handmade crispy golden murukku", "Made with heritage recipe and pure butter", "Rice flour, urad dal flour, butter, cumin, sesame, salt, oil", "", 200, "g", "RS-MUR-P200", 90, 150, 20, "YES"],
+      ["RS-MUR-001", "Standard Pouch", "MUR_KAI_STD_POUCH", "veg", "60 Days", "YES", "NO", "", "Handmade crispy golden murukku", "Made with heritage recipe and pure butter", "Rice flour, urad dal flour, butter, cumin, sesame, salt, oil", "", 400, "g", "RS-MUR-P400", 175, 100, 15, "NO"],
+      ["RS-MIX-002", "Standard Pouch", "MIX_MADRAS_STD_POUCH", "veg", "45 Days", "NO", "NO", "", "Spicy Madras style mixture", "Classic spicy snack with roasted nuts", "Gram flour, rice flour, peanuts, curry leaves, chilli, salt, oil", "", 250, "g", "RS-MIX-P250", 110, 180, 25, "YES"],
+    ],
+    notes: [
+      "VARIANTS IMPORT – step 3 of 3 (Categories -> Products -> Variants)",
+      "Products must already exist. Each row is one pack size; repeat the product_sku and item_name for more sizes.",
+      "A row whose item_name already exists under that product just adds a new pack size to that item.",
+      "",
+      "• product_sku      [REQUIRED]  SKU of an existing product.",
+      "• item_name        [REQUIRED]  e.g. Standard Pouch, Gift Box. Max 100 chars.",
+      "• item_code        [OPTIONAL]  Unique. Auto-generated if empty. Max 255 chars.",
+      "• veg_type         [OPTIONAL]  veg, nonveg, vegan, na. Default veg.",
+      "• shelf_life, is_featured, is_ready_to_mix, cooking_recipe, short_description, item_description, ingredients, item_image  [OPTIONAL]",
+      "• unit_value       [REQUIRED]  Pack size number > 0.",
+      "• unit             [REQUIRED]  Active unit code: g, kg, ml, L, pcs, pkt, box.",
+      "• variant_sku      [REQUIRED]  Unique per pack size. Max 100 chars.",
+      "• price            [REQUIRED]  Rupees, > 0.",
+      "• stock_qty        [OPTIONAL]  Integer >= 0. Default 0.",
+      "• reorder_level    [OPTIONAL]  Integer >= 0. Default 10.",
+      "• is_default       [OPTIONAL]  YES for the primary pack size.",
+    ],
+    widths: [16, 20, 24, 10, 12, 12, 15, 30, 32, 38, 40, 20, 12, 8, 16, 10, 12, 14, 12],
+  },
+};
+
+function buildSingleTemplate(type: SingleTemplate) {
+  const t = SINGLE_TEMPLATES[type];
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet([t.headers, ...t.rows]);
+  ws["!cols"] = t.widths.map((wch) => ({ wch }));
+  XLSX.utils.book_append_sheet(wb, ws, t.sheet);
+  const wsNotes = XLSX.utils.aoa_to_sheet(t.notes.map((n) => [n]));
+  wsNotes["!cols"] = [{ wch: 120 }];
+  XLSX.utils.book_append_sheet(wb, wsNotes, "Instructions");
+
+  return new NextResponse(XLSX.write(wb, { type: "buffer", bookType: "xlsx" }), {
+    status: 200,
+    headers: {
+      "Content-Type":
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "Content-Disposition": `attachment; filename="${t.file}"`,
+    },
+  });
+}
+
 /**
- * GET /api/admin/import/template
+ * GET /api/admin/import/template?type=categories|products|variants
+ * Dedicated single-purpose templates; without `type` returns the legacy all-in-one one.
  * Returns a ready-to-fill Single Unified Excel template with sample catalog rows and instructions for Rithu Snacks.
  */
-export async function GET() {
+export async function GET(request: Request) {
+  const type = new URL(request.url).searchParams.get("type");
+  if (type === "categories" || type === "products" || type === "variants") {
+    return buildSingleTemplate(type);
+  }
+
   const wb = XLSX.utils.book_new();
 
   // ─── Sheet 1: Catalog Import (Single Unified Sheet) ───

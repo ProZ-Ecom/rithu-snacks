@@ -133,6 +133,8 @@ export default function AdminBrandsPage() {
         <Button
           variant="ghost"
           size="icon"
+          className="h-8 w-8 text-neutral-500 hover:text-secondary-700 hover:bg-secondary-50"
+          title="Edit Brand"
           onClick={() => {
             setSelectedBrand(row.original);
             setIsEditOpen(true);
@@ -144,6 +146,8 @@ export default function AdminBrandsPage() {
         <Button
           variant="ghost"
           size="icon"
+          className="h-8 w-8 text-neutral-400 hover:text-rose-600 hover:bg-rose-50"
+          title="Delete Brand"
           onClick={() => setDeleteId(row.original.uuid)}
         >
           <Trash2 className="h-4 w-4 text-[var(--color-error-600)]" />

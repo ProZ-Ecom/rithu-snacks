@@ -105,6 +105,7 @@ export const customerGlobalVariantListSchema = z
     inStock: z.boolean().optional(),
     isFeatured: z.boolean().optional(),
     vegType: z.enum(["veg", "non_veg", "nonveg", "vegan", "na"]).optional(),
+    skipFacets: z.boolean().optional(),
     sortBy: z
       .enum(["variantName", "salePrice", "basePrice", "createdAt", "productName"])
       .optional()

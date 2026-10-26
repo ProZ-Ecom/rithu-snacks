@@ -13,6 +13,7 @@ export function useCreateHsnCode() {
 
   return useMutation({
     mutationFn: (data: Record<string, unknown>) => createHsnCode(data),
+    meta: { successMessage: "HSN code created successfully" },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: hsnCodeKeys.all });
     },
@@ -30,6 +31,7 @@ export function useUpdateHsnCode() {
       uuid: string;
       data: Record<string, unknown>;
     }) => updateHsnCode(uuid, data),
+    meta: { successMessage: "HSN code updated successfully" },
 
     onSuccess: (_result, variables) => {
       queryClient.invalidateQueries({ queryKey: hsnCodeKeys.all });
@@ -45,6 +47,7 @@ export function useDeleteHsnCode() {
 
   return useMutation({
     mutationFn: (uuid: string) => deleteHsnCode(uuid),
+    meta: { successMessage: "HSN code deleted successfully" },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: hsnCodeKeys.all });
     },

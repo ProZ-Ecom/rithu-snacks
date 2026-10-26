@@ -34,6 +34,7 @@ export function ProductSection({ selectedCategoryId }: ProductSectionProps) {
     categoryIds: selectedCategoryId ? [selectedCategoryId] : undefined,
     page: 1,
     pageSize: 20,
+    skipFacets: true,
     sortBy: "createdAt",
     sortOrder: "desc",
   });

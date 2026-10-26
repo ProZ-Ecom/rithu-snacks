@@ -42,11 +42,13 @@ export const customerOrdersQuerySchema = z
       .int()
       .min(1, "pageSize must be at least 1")
       .max(100000, "pageSize cannot exceed 100000")
+      .max(100000, "pageSize cannot exceed 100000")
       .default(20),
     limit: z.coerce
       .number()
       .int()
       .min(1, "limit must be at least 1")
+      .max(100000, "limit cannot exceed 100000")
       .max(100000, "limit cannot exceed 100000")
       .optional(),
     search: z.string().trim().optional(),
@@ -70,12 +72,14 @@ export const customerOrdersListSchema = z
       .int()
       .min(1, "pageSize must be at least 1")
       .max(100000, "pageSize cannot exceed 100000")
+      .max(100000, "pageSize cannot exceed 100000")
       .default(20)
       .optional(),
     limit: z.coerce
       .number()
       .int()
       .min(1, "limit must be at least 1")
+      .max(100000, "limit cannot exceed 100000")
       .max(100000, "limit cannot exceed 100000")
       .optional(),
     search: z.string().trim().optional(),
@@ -211,6 +215,12 @@ export const shipOrderCourierSchema = z
     deliveryPartnerId: z.union([z.string(), z.number()]),
     trackingNumber: z.string().trim().min(3, "Tracking / AWB number is required").max(100),
     notes: z.string().max(500).optional(),
+    invoiceNumber: z.coerce
+      .number()
+      .int("Invoice number must be a whole number")
+      .positive("Invoice number must be greater than 0")
+      .max(99999999)
+      .optional(),
   })
   .strict();
 

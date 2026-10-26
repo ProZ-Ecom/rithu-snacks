@@ -128,7 +128,11 @@ export const POST = createApiHandler(
         }
       }
 
-      throw ApiError.unauthorized("Refresh token is required");
+      // If refresh fails, clear invalid auth cookies to avoid stale authentication loops in middleware
+      cookieStore.delete("access_token");
+      cookieStore.delete("refresh_token");
+
+      throw ApiError.unauthorized("Refresh token is required or expired");
     },
   },
   {

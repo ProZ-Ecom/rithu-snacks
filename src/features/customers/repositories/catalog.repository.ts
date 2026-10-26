@@ -994,6 +994,11 @@ export const catalogRepository = {
       where.is_featured = params.isFeatured;
     }
 
+    // Featured filter
+    if (params.isFeatured !== undefined) {
+      where.is_featured = params.isFeatured;
+    }
+
     // In Stock / Out of Stock filter
     if (params.inStock !== undefined) {
       where.out_of_stock = !params.inStock;
@@ -1023,6 +1028,11 @@ export const catalogRepository = {
     }
 
     const isPriceSort = params.sortBy === "basePrice" || params.sortBy === "salePrice";
+    const withFacets = !params.skipFacets;
+    const facetCount = (extra: Prisma.ProductVariantWhereInput) =>
+      withFacets
+        ? db.productVariant.count({ where: { ...baseFacetWhere, ...extra } })
+        : Promise.resolve(0);
 
     const [
       variants,
@@ -1060,12 +1070,12 @@ export const catalogRepository = {
         },
       }),
       db.productVariant.count({ where }),
-      db.productVariant.count({ where: { ...baseFacetWhere, out_of_stock: false } }),
-      db.productVariant.count({ where: { ...baseFacetWhere, out_of_stock: true } }),
-      db.productVariant.count({ where: { ...baseFacetWhere, veg_type: { in: ["veg", "na"] } } }),
-      db.productVariant.count({ where: { ...baseFacetWhere, veg_type: "nonveg" } }),
-      db.productVariant.count({ where: { ...baseFacetWhere, veg_type: "vegan" } }),
-      db.productVariant.count({ where: { ...baseFacetWhere, is_featured: true } }),
+      facetCount({ out_of_stock: false }),
+      facetCount({ out_of_stock: true }),
+      facetCount({ veg_type: { in: ["veg", "na"] } }),
+      facetCount({ veg_type: "nonveg" }),
+      facetCount({ veg_type: "vegan" }),
+      facetCount({ is_featured: true }),
     ]);
 
     let data: CustomerVariantListItemDto[] = variants.map((v) =>
@@ -1091,14 +1101,16 @@ export const catalogRepository = {
         pageSize,
         total,
         totalPages: Math.ceil(total / pageSize),
-        facets: {
-          inStockCount,
-          outOfStockCount,
-          vegCount,
-          nonVegCount,
-          veganCount,
-          featuredCount,
-        },
+        ...(withFacets && {
+          facets: {
+            inStockCount,
+            outOfStockCount,
+            vegCount,
+            nonVegCount,
+            veganCount,
+            featuredCount,
+          },
+        }),
       },
     };
   },

@@ -5,7 +5,11 @@ import { FormModal } from "@/components/common/FormModal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, type SelectOption } from "@/components/ui/select";
-import { useDeliveryPartners, useShipOrderCourier } from "../hooks";
+import {
+  useDeliveryPartners,
+  useNextInvoiceNumber,
+  useShipOrderCourier,
+} from "../hooks";
 import {
   Truck,
   Barcode,
@@ -38,9 +42,14 @@ export function ShipOrderModal({
 }: ShipOrderModalProps) {
   const { data: partners = [], isLoading: partnersLoading } = useDeliveryPartners();
   const shipMutation = useShipOrderCourier();
+  const { data: nextInvoice, isLoading: invoiceLoading } = useNextInvoiceNumber(
+    orderId,
+    open
+  );
 
   const [selectedPartnerId, setSelectedPartnerId] = useState<string>("");
   const [trackingNumber, setTrackingNumber] = useState<string>("");
+  const [invoiceNumber, setInvoiceNumber] = useState<string>("");
   const [notes, setNotes] = useState<string>("");
   const [validationError, setValidationError] = useState<string>("");
 
@@ -68,6 +77,11 @@ export function ShipOrderModal({
     }
   }, [open, partners, initialPartnerCode, initialTrackingNumber]);
 
+  // Pre-fill the next number for the current financial year (admin can edit it).
+  useEffect(() => {
+    if (open && nextInvoice) setInvoiceNumber(String(nextInvoice.invoiceNumber));
+  }, [open, nextInvoice]);
+
   const partnerOptions: SelectOption[] = useMemo(() => {
     return partners.map((partner) => ({
       value: String(partner.id),
@@ -77,6 +91,7 @@ export function ShipOrderModal({
 
   const handleClose = () => {
     setTrackingNumber("");
+    setInvoiceNumber("");
     setNotes("");
     setValidationError("");
     onClose();
@@ -97,6 +112,12 @@ export function ShipOrderModal({
       return;
     }
 
+    const parsedInvoice = Number(invoiceNumber);
+    if (!nextInvoice?.locked && (!Number.isInteger(parsedInvoice) || parsedInvoice < 1)) {
+      setValidationError("Please enter a valid invoice number (whole number, 1 or more)");
+      return;
+    }
+
     setValidationError("");
 
     shipMutation.mutate(
@@ -106,6 +127,7 @@ export function ShipOrderModal({
           deliveryPartnerId: selectedPartnerId,
           trackingNumber: trimmedAwb,
           notes: notes.trim() || undefined,
+          invoiceNumber: nextInvoice?.locked ? undefined : parsedInvoice,
         },
       },
       {
@@ -217,6 +239,32 @@ export function ShipOrderModal({
           </div>
           <p className="text-[11.5px] text-neutral-500 pt-0.5">
             Enter the consignment note / AWB barcode number provided on the courier receipt.
+          </p>
+        </div>
+
+        {/* Invoice Number (admin-entered, restarts at 1 each financial year) */}
+        <div className="space-y-2">
+          <label className="block text-xs font-bold text-neutral-800 uppercase tracking-wider">
+            Invoice Number <span className="text-red-500">*</span>
+          </label>
+          {invoiceLoading ? (
+            <div className="h-11 w-full bg-neutral-100 rounded-xl animate-pulse" />
+          ) : (
+            <Input
+              type="number"
+              min={1}
+              step={1}
+              value={invoiceNumber}
+              onChange={(e) => setInvoiceNumber(e.target.value)}
+              disabled={nextInvoice?.locked}
+              placeholder="e.g. 1086"
+              className="h-11 rounded-xl font-mono text-sm font-semibold text-neutral-900 border-neutral-300 focus:border-secondary-500 focus:ring-secondary-500"
+            />
+          )}
+          <p className="text-[11.5px] text-neutral-500 pt-0.5">
+            {nextInvoice?.locked
+              ? "This order already has an invoice number."
+              : `Next number for financial year ${nextInvoice?.financialYear ?? "—"}. Numbering starts again from 1 every April; a number cannot repeat in the same year.`}
           </p>
         </div>
 

@@ -14,6 +14,7 @@ export function useCreateCategory() {
 
   return useMutation({
     mutationFn: (data: Record<string, unknown>) => createCategory(data),
+    meta: { successMessage: "Category created successfully" },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: categoryKeys.all });
       queryClient.invalidateQueries({ queryKey: ["customer", "catalog"] });
@@ -27,6 +28,7 @@ export function useUpdateCategory() {
   return useMutation({
     mutationFn: ({ id, data }: { id: number | string; data: Record<string, unknown> }) =>
       updateCategory(id as number, data),
+    meta: { successMessage: "Category updated successfully" },
     onSuccess: (_result, variables) => {
       queryClient.invalidateQueries({ queryKey: categoryKeys.all });
       queryClient.invalidateQueries({ queryKey: categoryKeys.detail(variables.id) });

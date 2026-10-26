@@ -36,6 +36,7 @@ export function FeaturedSection({ className = "", limit = 8 }: FeaturedSectionPr
     isFeatured: true,
     page: 1,
     pageSize: limit,
+    skipFacets: true,
     sortBy: "createdAt",
     sortOrder: "desc",
   });

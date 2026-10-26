@@ -53,6 +53,9 @@ export async function getCustomerVariants(
   if (params?.vegType !== undefined) {
     body.vegType = params.vegType;
   }
+  if (params?.skipFacets) {
+    body.skipFacets = true;
+  }
 
   const response = await apiClient.post<CustomerVariantListItemDto[]>(
     "/api/customer/variants",

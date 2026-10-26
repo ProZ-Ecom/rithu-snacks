@@ -116,6 +116,8 @@ export default function AdminGstRatesPage() {
           <Button
             variant="ghost"
             size="icon"
+            className="h-8 w-8 text-neutral-500 hover:text-secondary-700 hover:bg-secondary-50"
+            title="Edit GST Rate"
             onClick={() => {
               setSelectedGst(row.original);
               setIsEditOpen(true);
@@ -127,6 +129,8 @@ export default function AdminGstRatesPage() {
           <Button
             variant="ghost"
             size="icon"
+            className="h-8 w-8 text-neutral-400 hover:text-rose-600 hover:bg-rose-50"
+            title="Delete GST Rate"
             onClick={() => setDeleteId(row.original.id)}
           >
             <Trash2 className="h-4 w-4 text-[var(--color-error-600)]" />

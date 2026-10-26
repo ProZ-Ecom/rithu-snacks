@@ -34,10 +34,27 @@ export interface ImportPreviewItem {
   }[];
 }
 
+/**
+ * What a single upload contains.
+ *  - categories / products / variants: one dedicated sheet per upload
+ *  - catalog: legacy all-in-one workbook (unified sheet or Categories + Products + Variants)
+ */
+export type ImportMode = "catalog" | "categories" | "products" | "variants";
+
+export interface ImportPreviewCategory {
+  name: string;
+  code: string;
+  parentName?: string;
+  description?: string;
+  sortOrder: number;
+}
+
 export interface ImportResult {
+  mode?: ImportMode;
   totalRows: number;
   successCount: number;
   rejectedCount: number;
+  previewCategories?: ImportPreviewCategory[];
   preview: ImportPreviewItem[];
   rejected: ImportRowResult[];
   importedCategories: string[];
@@ -270,7 +287,8 @@ export const bulkImportService = {
   async importFromBuffer(
     buffer: Buffer,
     adminUserId?: bigint | null,
-    dryRun = false
+    dryRun = false,
+    mode: ImportMode = "catalog"
   ): Promise<ImportResult> {
     const workbook = XLSX.read(buffer, { type: "buffer" });
     const sheetNames = workbook.SheetNames;
@@ -357,9 +375,13 @@ export const bulkImportService = {
 
     // Products SKU & Slug lookup
     const existingDbProductSkus = new Set<string>();
+    const dbProductBySku = new Map<string, { id: bigint; name: string }>();
     const usedProdSlugs = new Set<string>();
     for (const p of existingProductSkus) {
-      if (p.sku) existingDbProductSkus.add(p.sku.toUpperCase());
+      if (p.sku) {
+        existingDbProductSkus.add(p.sku.toUpperCase());
+        dbProductBySku.set(p.sku.toUpperCase(), { id: p.id, name: p.name });
+      }
       if (p.slug) usedProdSlugs.add(p.slug.toUpperCase());
     }
     for (const p of existingProductSlugs) {
@@ -484,10 +506,19 @@ export const bulkImportService = {
     });
 
     const isMultiSheet =
-      !catalogSheetName &&
-      sheetNames.includes("Categories") &&
-      sheetNames.includes("Products") &&
-      (sheetNames.includes("Variants") || sheetNames.includes("Items"));
+      mode !== "catalog" ||
+      (!catalogSheetName &&
+        sheetNames.includes("Categories") &&
+        sheetNames.includes("Products") &&
+        (sheetNames.includes("Variants") || sheetNames.includes("Items")));
+
+    // Dedicated single-purpose uploads read only their own sheet
+    // (named after the type, otherwise the first non-instruction sheet).
+    const firstDataSheet =
+      sheetNames.find((n: string) => !n.toLowerCase().includes("instruction")) ||
+      sheetNames[0];
+    const sheetForMode = (preferred: string[]) =>
+      sheetNames.find((n: string) => preferred.includes(n)) ?? firstDataSheet;
 
     // ─────────────────────────────────────────────────────────────────────────
     // BRANCH A: UNIFIED SINGLE SHEET
@@ -1320,12 +1351,51 @@ export const bulkImportService = {
     // BRANCH B: MULTI-SHEET FORMAT (Categories, Products, Variants)
     // ─────────────────────────────────────────────────────────────────────────
     else {
-      const rawCats = parseSheet<RawCategoryRow>("Categories");
-      const rawProds = parseSheet<RawProductRow>("Products");
-      const rawVars = parseSheet<RawVariantRow>(
-        sheetNames.includes("Variants") ? "Variants" : "Items"
-      );
+      const wantCats = mode === "catalog" || mode === "categories";
+      const wantProds = mode === "catalog" || mode === "products";
+      const wantVars = mode === "catalog" || mode === "variants";
+
+      const rawCats = wantCats
+        ? parseSheet<RawCategoryRow>(
+            mode === "catalog" ? "Categories" : sheetForMode(["Categories"])
+          )
+        : [];
+      const rawProds = wantProds
+        ? parseSheet<RawProductRow>(
+            mode === "catalog" ? "Products" : sheetForMode(["Products"])
+          )
+        : [];
+      const rawVars = wantVars
+        ? parseSheet<RawVariantRow>(
+            mode === "catalog"
+              ? sheetNames.includes("Variants")
+                ? "Variants"
+                : "Items"
+              : sheetForMode(["Variants", "Items"])
+          )
+        : [];
       totalRows = rawCats.length + rawProds.length + rawVars.length;
+
+      if (mode !== "catalog" && totalRows === 0) {
+        return {
+          mode,
+          totalRows: 0,
+          successCount: 0,
+          rejectedCount: 1,
+          preview: [],
+          rejected: [
+            {
+              row: 1,
+              sheet: firstDataSheet,
+              status: "rejected",
+              name: "(empty sheet)",
+              reason: "The Excel sheet contains no data rows.",
+            },
+          ],
+          importedCategories: [],
+          importedProducts: [],
+        };
+      }
 
       // 1. Validate Categories Sheet
       for (let i = 0; i < rawCats.length; i++) {
@@ -1436,6 +1506,31 @@ export const bulkImportService = {
         }
 
         if (categoryMap.has(name.toLowerCase())) {
+          if (mode === "categories") {
+            rejected.push({
+              row: rowNum,
+              sheet: "Categories",
+              status: "rejected",
+              name,
+              reason: `Category "${name}" already exists in database`,
+            });
+          }
+          continue;
+        }
+
+        if (
+          mode === "categories" &&
+          parentName &&
+          !categoryMap.has(parentName.toLowerCase()) &&
+          !sheetSeenCatNames.has(parentName.toLowerCase())
+        ) {
+          rejected.push({
+            row: rowNum,
+            sheet: "Categories",
+            status: "rejected",
+            name,
+            reason: `Parent category "${parentName}" not found. List it earlier in this sheet or create it first`,
+          });
           continue;
         }
 
@@ -1528,6 +1623,16 @@ export const bulkImportService = {
             status: "rejected",
             name,
             reason: "Category name is required",
+          });
+          continue;
+        }
+        if (mode === "products" && !categoryMap.has(categoryName.toLowerCase())) {
+          rejected.push({
+            row: rowNum,
+            sheet: "Products",
+            status: "rejected",
+            name,
+            reason: `Category "${categoryName}" not found. Import categories first`,
           });
           continue;
         }
@@ -1952,6 +2057,19 @@ export const bulkImportService = {
       varsByProductSku.get(v.productSku)!.push(v);
     }
 
+    const toPreviewVariants = (vars: typeof validVars) =>
+      vars.map((v) => ({
+        variantName: v.variantName,
+        variantCode: v.variantCode,
+        vegType: v.vegType,
+        unit: v.unit,
+        unitValue: v.unitValue,
+        variantSku: v.variantSku,
+        price: v.price,
+        stockQty: v.stockQty,
+        isDefault: v.isDefault,
+      }));
+
     for (const prod of validProds) {
       const vars = varsByProductSku.get(prod.sku) ?? [];
       preview.push({
@@ -1960,28 +2078,45 @@ export const bulkImportService = {
         productCode: prod.slug,
         sku: prod.sku,
         brand: prod.brandName,
-        variants: vars.map((v) => ({
-          variantName: v.variantName,
-          variantCode: v.variantCode,
-          vegType: v.vegType,
-          unit: v.unit,
-          unitValue: v.unitValue,
-          variantSku: v.variantSku,
-          price: v.price,
-          stockQty: v.stockQty,
-          isDefault: v.isDefault,
-        })),
+        variants: toPreviewVariants(vars),
       });
     }
 
-    const successCount = validVars.length;
+    // Variants that attach to products already in the database
+    const newProductSkus = new Set(validProds.map((p) => p.sku));
+    for (const [productSku, vars] of varsByProductSku) {
+      if (newProductSkus.has(productSku)) continue;
+      preview.push({
+        categoryName: "",
+        productName: dbProductBySku.get(productSku)?.name ?? productSku,
+        sku: productSku,
+        variants: toPreviewVariants(vars),
+      });
+    }
+
+    const previewCategories: ImportPreviewCategory[] = validCats.map((c) => ({
+      name: c.name,
+      code: c.slug,
+      parentName: c.parentName,
+      description: c.description,
+      sortOrder: c.sortOrder,
+    }));
+
+    const successCount =
+      mode === "categories"
+        ? validCats.length
+        : mode === "products"
+          ? validProds.length
+          : validVars.length;
 
     // Return early if preview/dry-run mode
     if (dryRun) {
       return {
+        mode,
         totalRows,
         successCount,
         rejectedCount: rejected.length,
+        previewCategories,
         preview,
         rejected,
         importedCategories: [],
@@ -1992,7 +2127,11 @@ export const bulkImportService = {
     // ─── 6. Commit Valid Records to Database in Transaction ───
     await db.$transaction(async (tx) => {
       // 6a. Insert categories
-      for (const cat of validCats) {
+      // Parents first so children can resolve parentId
+      const orderedCats = [...validCats].sort(
+        (a, b) => (a.parentName ? 1 : 0) - (b.parentName ? 1 : 0)
+      );
+      for (const cat of orderedCats) {
         let parentId: bigint | undefined;
         if (cat.parentName) {
           parentId = categoryMap.get(cat.parentName.toLowerCase());
@@ -2031,6 +2170,110 @@ export const bulkImportService = {
         }
         importedCategories.push(cat.name);
       }
+
+      // Creates Variant -> UnitPrice -> Inventory rows under a product (new or existing)
+      const createVariants = async (
+        productId: bigint,
+        vars: typeof validVars,
+        existingVariants: Map<string, bigint> = new Map(),
+        productHasVariants = false
+      ) => {
+        // Group subvariants by variant_name (3-tier architecture: Product -> Variant -> UnitPrice)
+        const variantsByName = new Map<string, typeof vars>();
+        for (const v of vars) {
+          const key = v.variantName.toLowerCase();
+          if (!variantsByName.has(key)) variantsByName.set(key, []);
+          variantsByName.get(key)!.push(v);
+        }
+
+        let isFirstVariant = true;
+        for (const [, subvariants] of variantsByName) {
+          const first = subvariants[0];
+          let isVariantDefault = subvariants.some((sv) => sv.isDefault);
+          if (isFirstVariant && !productHasVariants && !vars.some((v) => v.isDefault)) {
+            isVariantDefault = true;
+          }
+          isFirstVariant = false;
+
+          const existingVariantId = existingVariants.get(first.variantName.toLowerCase());
+          const createdVariant = existingVariantId
+            ? { id: existingVariantId }
+            : await tx.productVariant.create({
+            data: {
+              uuid: crypto.randomUUID(),
+              productId,
+              variant_name: first.variantName,
+              slug: first.variantCode,
+              is_default: isVariantDefault,
+              isActive: first.isActive,
+              out_of_stock: first.outOfStock,
+              is_featured: first.isFeatured,
+              is_ready_to_mix: first.isReadyToMix,
+              cooking_recipe: first.cookingRecipe ?? null,
+              shelf_life: first.shelfLife ?? null,
+              short_description: first.shortDescription ?? null,
+              description: first.description ?? null,
+              ingredients: first.ingredients ?? null,
+              veg_type: first.vegType,
+              created_by: adminUserId ?? null,
+              updated_by: adminUserId ?? null,
+            },
+          });
+
+          if (first.itemImage && !existingVariantId) {
+            await tx.product_variant_images.create({
+              data: {
+                uuid: crypto.randomUUID(),
+                variant_id: createdVariant.id,
+                image_url: first.itemImage,
+                is_primary: true,
+                sort_order: 0,
+                is_active: true,
+                status: true,
+                created_by: adminUserId ?? null,
+                updated_by: adminUserId ?? null,
+              },
+            });
+          }
+
+          // Ensure at least one subvariant in this variant is marked default
+          if (!existingVariantId && !subvariants.some((sv) => sv.isDefault)) {
+            subvariants[0].isDefault = true;
+          }
+
+          for (const sv of subvariants) {
+            const unitId = unitMap.get(sv.unit);
+            if (!unitId) continue;
+
+            const createdVup = await tx.variantUnitPrice.create({
+              data: {
+                uuid: crypto.randomUUID(),
+                variant_id: createdVariant.id,
+                unit_id: unitId,
+                unit_value: sv.unitValue,
+                sku: sv.variantSku,
+                base_price: sv.price,
+                is_default: sv.isDefault,
+                isActive: sv.isActive,
+                created_by: adminUserId ?? null,
+                updated_by: adminUserId ?? null,
+              },
+            });
+
+            await tx.inventory.create({
+              data: {
+                variantUnitPriceId: createdVup.id,
+                quantity_available: sv.stockQty,
+                quantity_reserved: 0,
+                reorderLevel: sv.reorderLevel,
+                is_active: true,
+                created_by: adminUserId ?? null,
+                updated_by: adminUserId ?? null,
+              },
+            });
+          }
+        }
+      };
 
       // 6b. Insert products + variants
       for (const prod of validProds) {
@@ -2073,107 +2316,32 @@ export const bulkImportService = {
           });
         }
 
-        const vars = varsByProductSku.get(prod.sku) ?? [];
+        await createVariants(createdProd.id, varsByProductSku.get(prod.sku) ?? []);
+      }
 
-        // Group subvariants by variant_name (3-tier architecture: Product -> Variant -> UnitPrice)
-        const variantsByName = new Map<string, typeof vars>();
-        for (const v of vars) {
-          const key = v.variantName.toLowerCase();
-          if (!variantsByName.has(key)) variantsByName.set(key, []);
-          variantsByName.get(key)!.push(v);
+      // 6c. Variants for products that already exist in the database
+      for (const [productSku, vars] of varsByProductSku) {
+        if (newProductSkus.has(productSku)) continue;
+        const existing = dbProductBySku.get(productSku);
+        if (!existing) continue;
+        const currentVariants = await tx.productVariant.findMany({
+          where: { productId: existing.id, deleted_at: null },
+          select: { id: true, variant_name: true },
+        });
+        const existingVariants = new Map<string, bigint>();
+        for (const cv of currentVariants) {
+          existingVariants.set(cv.variant_name.toLowerCase(), cv.id);
         }
-
-        let isFirstVariant = true;
-        for (const [, subvariants] of variantsByName) {
-          const first = subvariants[0];
-          let isVariantDefault = subvariants.some((sv) => sv.isDefault);
-          if (isFirstVariant && !vars.some((v) => v.isDefault)) {
-            isVariantDefault = true;
-          }
-          isFirstVariant = false;
-
-          const createdVariant = await tx.productVariant.create({
-            data: {
-              uuid: crypto.randomUUID(),
-              productId: createdProd.id,
-              variant_name: first.variantName,
-              slug: first.variantCode,
-              is_default: isVariantDefault,
-              isActive: first.isActive,
-              out_of_stock: first.outOfStock,
-              is_featured: first.isFeatured,
-              is_ready_to_mix: first.isReadyToMix,
-              cooking_recipe: first.cookingRecipe ?? null,
-              shelf_life: first.shelfLife ?? null,
-              short_description: first.shortDescription ?? null,
-              description: first.description ?? null,
-              ingredients: first.ingredients ?? null,
-              veg_type: first.vegType,
-              created_by: adminUserId ?? null,
-              updated_by: adminUserId ?? null,
-            },
-          });
-
-          if (first.itemImage) {
-            await tx.product_variant_images.create({
-              data: {
-                uuid: crypto.randomUUID(),
-                variant_id: createdVariant.id,
-                image_url: first.itemImage,
-                is_primary: true,
-                sort_order: 0,
-                is_active: true,
-                status: true,
-                created_by: adminUserId ?? null,
-                updated_by: adminUserId ?? null,
-              },
-            });
-          }
-
-          // Ensure at least one subvariant in this variant is marked default
-          if (!subvariants.some((sv) => sv.isDefault)) {
-            subvariants[0].isDefault = true;
-          }
-
-          for (const sv of subvariants) {
-            const unitId = unitMap.get(sv.unit);
-            if (!unitId) continue;
-
-            const createdVup = await tx.variantUnitPrice.create({
-              data: {
-                uuid: crypto.randomUUID(),
-                variant_id: createdVariant.id,
-                unit_id: unitId,
-                unit_value: sv.unitValue,
-                sku: sv.variantSku,
-                base_price: sv.price,
-                is_default: sv.isDefault,
-                isActive: sv.isActive,
-                created_by: adminUserId ?? null,
-                updated_by: adminUserId ?? null,
-              },
-            });
-
-            await tx.inventory.create({
-              data: {
-                variantUnitPriceId: createdVup.id,
-                quantity_available: sv.stockQty,
-                quantity_reserved: 0,
-                reorderLevel: sv.reorderLevel,
-                is_active: true,
-                created_by: adminUserId ?? null,
-                updated_by: adminUserId ?? null,
-              },
-            });
-          }
-        }
+        await createVariants(existing.id, vars, existingVariants, currentVariants.length > 0);
       }
     });
 
     return {
+      mode,
       totalRows,
       successCount,
       rejectedCount: rejected.length,
+      previewCategories,
       preview,
       rejected,
       importedCategories,

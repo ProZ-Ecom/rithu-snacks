@@ -641,6 +641,9 @@ model Order {
   totalAmount                    Decimal                @default(0.00) @map("total_amount") @db.Decimal(10, 2)
   notes                          String?                @db.VarChar(500)
   placed_at                      DateTime?              @db.Timestamp(0)
+  invoiceNumber                  Int?                   @map("invoice_number") @db.UnsignedInt
+  invoiceFinancialYear           String?                @map("invoice_financial_year") @db.VarChar(9)
+  invoiceDate                    DateTime?              @map("invoice_date") @db.Timestamp(0)
   createdAt                      DateTime               @default(now()) @map("created_at") @db.Timestamp(0)
   updatedAt                      DateTime               @default(now()) @updatedAt @map("updated_at") @db.Timestamp(0)
   is_active                      Boolean                @default(true)
@@ -669,9 +672,9 @@ model Order {
   @@index([createdAt], map: "idx_order_created")
   @@index([order_status], map: "idx_order_status")
   @@index([userId], map: "idx_order_user")
+  @@unique([invoiceFinancialYear, invoiceNumber], map: "uq_order_invoice_fy_number")
   @@map("orders")
 }
-
 model OrderItem {
   id                                  BigInt            @id @default(autoincrement()) @db.UnsignedBigInt
   uuid                                String?           @default("UUID()") @db.VarChar(255)

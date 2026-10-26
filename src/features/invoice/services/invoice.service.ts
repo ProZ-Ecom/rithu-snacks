@@ -1,7 +1,9 @@
+import type { Prisma } from "@/generated/prisma";
 import { ApiError } from "@/lib/api/api-error";
 import { userRepository } from "@/features/users/repositories/user.repository";
 import { invoiceRepository } from "../repositories/invoice.repository";
 import { rupeesInWords } from "../utils/amount-in-words";
+import { financialYearOf } from "../utils/financial-year";
 import { isSameState, resolveStateCode } from "../utils/state-codes";
 import type {
   InvoiceBankDto,
@@ -29,10 +31,83 @@ function readBankDetails(): InvoiceBankDto | null {
     accountNumber: process.env.INVOICE_BANK_ACCOUNT?.trim() || "",
     branch: process.env.INVOICE_BANK_BRANCH?.trim() || "",
     ifsc: process.env.INVOICE_BANK_IFSC?.trim() || "",
+    accountHolder: process.env.INVOICE_BANK_HOLDER?.trim() || "",
   };
 }
 
 export const invoiceService = {
+  /**
+   * Suggested invoice number for the admin to confirm when shipping. The series
+   * is per financial year, so it starts again at 1 every April. If the order
+   * already has a number it is returned as-is and cannot be changed.
+   */
+  async getNextInvoiceNumber(orderRef?: string) {
+    if (orderRef) {
+      const existing = await invoiceRepository.findOrderInvoiceNumber(orderRef);
+      if (existing?.invoiceNumber) {
+        return {
+          invoiceNumber: existing.invoiceNumber,
+          financialYear: existing.invoiceFinancialYear,
+          locked: true,
+        };
+      }
+    }
+
+    const financialYear = financialYearOf(new Date());
+    const last = await invoiceRepository.getLastInvoiceNumber(financialYear);
+    return { invoiceNumber: last + 1, financialYear, locked: false };
+  },
+
+  /**
+   * Stamps the admin-entered invoice number on an order (called when it is
+   * shipped). The invoice date is the day of issue and decides the financial
+   * year. An order keeps its first number; the same number cannot be used twice
+   * in one financial year.
+   */
+  async assignInvoiceNumber(
+    tx: Prisma.TransactionClient,
+    order: { id: bigint; invoiceNumber: number | null },
+    invoiceNumber: number | undefined
+  ) {
+    if (order.invoiceNumber) return;
+    if (!invoiceNumber) {
+      throw ApiError.badRequest("Invoice number is required to ship the order");
+    }
+
+    const invoiceDate = new Date();
+    const financialYear = financialYearOf(invoiceDate);
+
+    const taken = await invoiceRepository.findInvoiceNumberOwner(
+      financialYear,
+      invoiceNumber,
+      tx
+    );
+    if (taken) {
+      throw ApiError.conflict(
+        `Invoice number ${invoiceNumber} is already used in ${financialYear}`
+      );
+    }
+
+    try {
+      await tx.order.update({
+        where: { id: order.id },
+        data: {
+          invoiceNumber,
+          invoiceFinancialYear: financialYear,
+          invoiceDate,
+        },
+      });
+    } catch (err) {
+      // Two admins submitting the same number at once: the unique key catches it.
+      if ((err as { code?: string })?.code === "P2002") {
+        throw ApiError.conflict(
+          `Invoice number ${invoiceNumber} is already used in ${financialYear}`
+        );
+      }
+      throw err;
+    }
+  },
+
   /**
    * @param ownerUserId When given (a customer viewing their own invoice), the
    * order must belong to that user; admins pass nothing and can print any order.
@@ -126,7 +201,8 @@ export const invoiceService = {
           .join(" - "),
         hsn: hsn?.code ?? null,
         quantity,
-        per: "Nos",
+        per: "Pac",
+        amount: round2(taxableValue + cgstAmount + sgstAmount + igstAmount),
         rate: quantity ? round2(taxableValue / quantity) : 0,
         taxableValue,
         cgstPercent,
@@ -182,10 +258,16 @@ export const invoiceService = {
     const invoiceValue = Math.round(beforeRounding);
     const roundOff = round2(invoiceValue - beforeRounding);
 
-    const invoiceDate = order.placed_at ?? order.createdAt;
+    const subTotal = beforeRounding;
+    // The invoice is dated the day it was issued (shipping); orders not yet
+    // shipped fall back to the order date.
+    const invoiceDate = order.invoiceDate ?? order.placed_at ?? order.createdAt;
+    const received = order.payment_status === "paid" ? invoiceValue : 0;
 
     return {
-      invoiceNumber: order.orderNumber,
+      invoiceNumber: order.invoiceNumber ? String(order.invoiceNumber) : null,
+      financialYear: order.invoiceFinancialYear,
+      placeOfSupply: [buyerStateCode, billing?.state].filter(Boolean).join("-") || null,
       invoiceDate,
       orderNumber: order.orderNumber,
       paymentStatus: order.payment_status,
@@ -204,8 +286,11 @@ export const invoiceService = {
       totalTaxAmount,
       deliveryCharge,
       discountAmount: toNumber(order.discountAmount),
+      subTotal,
       roundOff,
       invoiceValue,
+      received,
+      balance: round2(invoiceValue - received),
       invoiceValueInWords: rupeesInWords(invoiceValue),
       taxAmountInWords: rupeesInWords(totalTaxAmount),
       bank: readBankDetails(),
