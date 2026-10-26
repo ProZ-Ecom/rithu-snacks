@@ -21,10 +21,8 @@ import type {
   ReturnOrderInput,
   OrderStatusTransitionInput,
   ShipOrderCourierInput,
-  ShipOrderCourierInput,
 } from "../validations/order.schema";
 import type { orders_order_status } from "@/generated/prisma";
-import crypto from "crypto";
 import crypto from "crypto";
 
 export const orderService = {
@@ -262,43 +260,7 @@ export const orderService = {
 
     const payableBeforeShipping = Math.max(0, subtotal - offerDiscount - couponDiscount);
     const shippingCharge = isExpress ? 99 : (payableBeforeShipping >= 499 ? 0 : 49);
-    // Free delivery is judged on what the customer actually pays, after offers & coupons.
-    const isExpress = (input.deliveryMethod || "").toLowerCase() === "express";
-
-    // 4b. Evaluate Coupon Discount
-    let couponDiscount = 0;
-    let appliedCouponId: bigint | null = cart.coupon_id ?? null;
-
-    if (!appliedCouponId && input.couponCode) {
-      try {
-        const validated = await couponService.validateAndCalculateDiscount(
-          input.couponCode,
-          userId,
-          Math.max(0, subtotal - offerDiscount)
-        );
-        appliedCouponId = BigInt(validated.couponId);
-      } catch (err: any) {
-        throw ApiError.badRequest(err.message || "Invalid coupon code");
-      }
-    }
-
-    if (appliedCouponId) {
-      const validated = await couponService.validateCouponById(
-        appliedCouponId,
-        userId,
-        Math.max(0, subtotal - offerDiscount)
-      );
-      if (validated) {
-        couponDiscount = validated.discountAmount;
-      } else {
-        appliedCouponId = null;
-      }
-    }
-
-    const payableBeforeShipping = Math.max(0, subtotal - offerDiscount - couponDiscount);
-    const shippingCharge = isExpress ? 99 : (payableBeforeShipping >= 499 ? 0 : 49);
     const totalAmount = payableBeforeShipping + shippingCharge;
-    const combinedTotalDiscount = offerDiscount + couponDiscount;
     const combinedTotalDiscount = offerDiscount + couponDiscount;
 
     // 5. Execute creation transaction
@@ -307,10 +269,7 @@ export const orderService = {
       cartId: cart.id,
       couponId: appliedCouponId,
       couponDiscount,
-      couponId: appliedCouponId,
-      couponDiscount,
       subtotal,
-      discountAmount: combinedTotalDiscount,
       discountAmount: combinedTotalDiscount,
       shippingCharge,
       totalAmount,
@@ -842,7 +801,6 @@ export const orderService = {
       shippingAddressId: input.shippingAddressId || String(input.addressId),
       billingAddressId: input.billingAddressId,
       deliveryMethod: input.deliveryMethod || "standard",
-      deliveryMethod: input.deliveryMethod || "standard",
       notes: input.notes,
       paymentMethod: input.paymentMethod || "CARD",
       paymentDetails: input.paymentDetails,
@@ -852,7 +810,6 @@ export const orderService = {
   async getCheckoutSummary(
     userId: number | string | bigint,
     deliveryMethod?: string,
-    couponCode?: string
     couponCode?: string
   ) {
     const user = await userRepository.findById(String(userId));
@@ -920,56 +877,8 @@ export const orderService = {
     const totalAmount = payableBeforeShipping + shippingCharge;
     const combinedDiscount = pricing.totalDiscount + couponDiscount;
 
-    let couponDiscount = 0;
-    let couponInfo: { id: number; code: string; discount: number } | null = null;
-
-    if (cart?.coupon_id) {
-      const validated = await couponService.validateCouponById(
-        cart.coupon_id,
-        user.internalId,
-        pricing.total
-      );
-      if (validated) {
-        couponDiscount = validated.discountAmount;
-        couponInfo = {
-          id: validated.couponId,
-          code: validated.code,
-          discount: validated.discountAmount,
-        };
-      }
-    } else if (couponCode) {
-      try {
-        const validated = await couponService.validateAndCalculateDiscount(
-          couponCode,
-          user.internalId,
-          pricing.total
-        );
-        couponDiscount = validated.discountAmount;
-        couponInfo = {
-          id: validated.couponId,
-          code: validated.code,
-          discount: validated.discountAmount,
-        };
-      } catch {
-        // invalid code passed, ignore for summary preview
-      }
-    }
-
-    const isExpress = (deliveryMethod || "").toLowerCase() === "express";
-    const payableBeforeShipping = Math.max(0, pricing.total - couponDiscount);
-    const shippingCharge = isExpress ? 99 : (payableBeforeShipping >= 499 ? 0 : 49);
-    const totalAmount = payableBeforeShipping + shippingCharge;
-    const combinedDiscount = pricing.totalDiscount + couponDiscount;
-
     return {
       subtotal: pricing.subtotal,
-      deliveryCharge: shippingCharge,
-      shippingCharge: shippingCharge,
-      discount: combinedDiscount,
-      discountAmount: combinedDiscount,
-      offerDiscount: pricing.totalDiscount,
-      couponDiscount,
-      totalSavings: pricing.totalSavings + couponDiscount,
       deliveryCharge: shippingCharge,
       shippingCharge: shippingCharge,
       discount: combinedDiscount,
@@ -984,12 +893,8 @@ export const orderService = {
         subtotal: pricing.subtotal,
         shipping: shippingCharge,
         discount: combinedDiscount,
-        shipping: shippingCharge,
-        discount: combinedDiscount,
         total: totalAmount,
       },
-      coupon: couponInfo,
-      couponCode: couponInfo?.code || null,
       coupon: couponInfo,
       couponCode: couponInfo?.code || null,
     };

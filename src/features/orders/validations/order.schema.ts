@@ -26,8 +26,6 @@ export const customerCreateOrderSchema = z
     billingAddressId: z.string().uuid("Invalid billingAddressId UUID format").optional(),
     deliveryMethod: z.string().optional().default("standard"),
     couponCode: z.string().trim().max(50).optional(),
-    deliveryMethod: z.string().optional().default("standard"),
-    couponCode: z.string().trim().max(50).optional(),
     notes: z.string().max(500, "Notes cannot exceed 500 characters").optional(),
     paymentMethod: z.enum(["CARD", "COD", "UPI"]).default("CARD").optional(),
     paymentDetails: z.record(z.string(), z.any()).optional(),
@@ -109,14 +107,7 @@ export const adminOrdersListSchema = z
       .int()
       .min(1, "pageSize must be at least 1")
       .max(100000, "pageSize cannot exceed 100000")
-      .max(100000, "pageSize cannot exceed 100000")
       .default(20),
-    limit: z
-      .number()
-      .int()
-      .min(1, "limit must be at least 1")
-      .max(100000, "limit cannot exceed 100000")
-      .optional(),
     limit: z
       .number()
       .int()

@@ -34,14 +34,6 @@ function LoginForm() {
     return "Authentication failed. Please try again.";
   };
 
-  const getErrorMessage = (error: string | null) => {
-    if (!error) return null;
-    if (error === "AccessDenied") return "Your account has been deactivated or blocked.";
-    if (error === "OAuthCallbackError" || error === "OAuthSignin")
-      return "Failed to authenticate with Google. Please try again.";
-    return "Authentication failed. Please try again.";
-  };
-
   const methods = useForm<LoginInput>({
     resolver: zodResolver(loginSchema),
     mode: "onChange",

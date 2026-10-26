@@ -23,7 +23,6 @@ import {
   shipOrderCourier,
   type AssignDeliveryInput,
   type ShipOrderCourierPayload,
-  type ShipOrderCourierPayload,
 } from "../api/get-orders";
 import type {
   DeliveryMethod,
