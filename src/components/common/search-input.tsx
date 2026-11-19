@@ -25,23 +25,57 @@ function SearchInput({
     propValue !== undefined ? propValue : (defaultValue || "")
   );
   const onSearchRef = React.useRef(onSearch);
-
-  React.useEffect(() => {
-    if (propValue !== undefined) {
-      setValue(propValue);
-    }
-  }, [propValue]);
+  const isFirstRender = React.useRef(true);
+  const lastEmittedValue = React.useRef<string | null>(null);
 
   React.useEffect(() => {
     onSearchRef.current = onSearch;
   }, [onSearch]);
 
+  // Synchronize internal state when propValue changes externally
   React.useEffect(() => {
+    if (propValue !== undefined && propValue !== value) {
+      setValue(propValue);
+      lastEmittedValue.current = String(propValue);
+    }
+  }, [propValue]);
+
+  // Debounced search trigger — ONLY runs when value actually changes and NEVER on initial mount
+  React.useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      lastEmittedValue.current = String(value);
+      return;
+    }
+
+    if (String(value) === lastEmittedValue.current) {
+      return;
+    }
+
     const timer = setTimeout(() => {
-      onSearchRef.current?.(value as string);
+      lastEmittedValue.current = String(value);
+      onSearchRef.current?.(String(value));
     }, debounceMs);
+
     return () => clearTimeout(timer);
   }, [value, debounceMs]);
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      e.preventDefault(); // Prevent accidental form submissions & page refresh
+      lastEmittedValue.current = String(value);
+      onSearchRef.current?.(String(value));
+    }
+    props.onKeyDown?.(e);
+  };
+
+  const handleClear = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setValue("");
+    lastEmittedValue.current = "";
+    onSearchRef.current?.("");
+  };
 
   return (
     <div className={cn("relative w-full", className)}>
@@ -50,6 +84,7 @@ function SearchInput({
         placeholder={placeholder}
         value={value}
         onChange={(e) => setValue(e.target.value)}
+        onKeyDown={handleKeyDown}
         className={cn(
           "h-11 rounded-xl border-theme-border bg-theme-surface text-theme-text-primary placeholder:text-theme-text-muted hover:border-theme-border-accent focus:border-theme-primary",
           value ? "pr-10" : ""
@@ -59,11 +94,9 @@ function SearchInput({
       {value && (
         <button
           type="button"
-          onClick={() => {
-            setValue("");
-            onSearchRef.current?.("");
-          }}
+          onClick={handleClear}
           className="absolute right-3 top-1/2 -translate-y-1/2 text-theme-text-muted hover:text-theme-primary cursor-pointer p-1 z-10"
+          aria-label="Clear search"
         >
           <X className="h-4 w-4" />
         </button>
