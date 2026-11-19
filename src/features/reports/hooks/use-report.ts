@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { apiClient, ApiClientError } from "@/lib/api/api-client";
 import { DEFAULT_PRESET, presetRange } from "../components/report-ui";
 import type { ReportOptions } from "../services/report-options.service";
@@ -10,7 +10,7 @@ import type { ReportOptions } from "../services/report-options.service";
 const CLIENT_ONLY = new Set(["preset"]);
 
 export function initialFilters(extra: Record<string, string> = {}): Record<string, string> {
-  return { preset: DEFAULT_PRESET, ...presetRange(DEFAULT_PRESET), ...extra };
+  return { preset: DEFAULT_PRESET, ...presetRange(DEFAULT_PRESET), page: "1", limit: "10", ...extra };
 }
 
 /**
@@ -33,6 +33,7 @@ export function useReport<T>(path: string, extraDefaults: Record<string, string>
   const result = useQuery({
     queryKey: ["report", path, query],
     queryFn: async () => (await apiClient.get<T>(`${path}${query}`)).data as T,
+    placeholderData: keepPreviousData,
     staleTime: 30_000,
   });
 

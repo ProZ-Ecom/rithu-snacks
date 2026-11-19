@@ -421,18 +421,20 @@ function DataTable<TData, TValue>({
             <span className="text-xs font-medium text-[var(--color-neutral-600)] whitespace-nowrap">
               Rows per page:
             </span>
-            <div className="w-20">
-              <Select
-                value={String(effectivePageSize)}
-                onValueChange={(val) => handlePageSizeChange(Number(val))}
-                options={pageSizeOptions.map((opt) => ({
-                  value: String(opt),
-                  label: String(opt),
-                }))}
-                size="sm"
-                placement="top"
-                className="h-8 rounded-lg font-semibold text-xs"
-              />
+            <div className="relative inline-flex items-center">
+              <select
+                value={effectivePageSize}
+                onChange={(e) => handlePageSizeChange(Number(e.target.value))}
+                className="h-8 appearance-none rounded-lg border border-neutral-300 bg-white pl-2.5 pr-7 text-xs font-semibold text-neutral-700 shadow-2xs hover:border-neutral-400 hover:bg-neutral-50 focus:border-[#7A2224] focus:outline-none focus:ring-1 focus:ring-[#7A2224]/20 cursor-pointer transition-all"
+                aria-label="Rows per page"
+              >
+                {pageSizeOptions.map((opt) => (
+                  <option key={opt} value={opt}>
+                    {opt}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-2 h-3.5 w-3.5 text-neutral-400" />
             </div>
           </div>
         </div>

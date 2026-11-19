@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo } from "react";
+import React, { useMemo, useCallback } from "react";
 import {
   ArrowLeft,
   IndianRupee,
@@ -17,7 +17,6 @@ import {
   CHART_COLORS,
   type Column,
   DataTable,
-  ExportButton,
   MetricCard,
   Note,
   Panel,
@@ -124,9 +123,26 @@ export default function SalesReportPage() {
   const compare = data ? compareLabelFor(data.range.days) : undefined;
 
   const dailyRows = useMemo(() => {
-    if (!data?.trend) return [];
-    return data.trend.slice().reverse();
-  }, [data?.trend]);
+    if (!data) return [];
+    return data.dailyBreakdown ?? (data.trend ? data.trend.slice().reverse() : []);
+  }, [data]);
+
+  const handleExportAll = useCallback(async () => {
+    const params = new URLSearchParams();
+    if (filters.dateFrom) params.set("dateFrom", filters.dateFrom);
+    if (filters.dateTo) params.set("dateTo", filters.dateTo);
+    if (filters.category) params.set("category", filters.category);
+    if (filters.brand) params.set("brand", filters.brand);
+    if (filters.paymentMethod) params.set("paymentMethod", filters.paymentMethod);
+    if (filters.tab) params.set("tab", filters.tab);
+    params.set("page", "1");
+    params.set("limit", "5000");
+
+    const res = await fetch(`/api/admin/reports/sales?${params.toString()}`);
+    if (!res.ok) throw new Error("Failed to export full sales dataset");
+    const json = await res.json();
+    return (json.data?.dailyBreakdown ?? json.data?.trend?.slice().reverse() ?? []) as SalesTrendPoint[];
+  }, [filters]);
 
   return (
     <PageContainer
@@ -155,14 +171,6 @@ export default function SalesReportPage() {
             <RefreshCw className={`h-3.5 w-3.5 ${isFetching ? "animate-spin" : ""}`} />
             Refresh
           </Button>
-          {dailyRows.length > 0 && (
-            <ExportButton
-              rows={dailyRows}
-              columns={dailyBreakdownColumns}
-              fileName="sales_report"
-              label="Export Excel"
-            />
-          )}
         </div>
       }
     >
@@ -172,6 +180,7 @@ export default function SalesReportPage() {
             value={filters}
             onChange={setFilters}
             extras={[
+              { name: "paymentMethod", label: "Payment Method", options: options?.paymentMethods ?? [] },
               { name: "category", label: "Category", options: options?.categories ?? [] },
               { name: "brand", label: "Brand", options: options?.brands ?? [] },
             ]}
@@ -266,7 +275,7 @@ export default function SalesReportPage() {
               />
             </div>
 
-            {/* Sales Momentum Trend (matches Dashboard Spline Graph) */}
+            {/* Sales Momentum Trend */}
             <Panel
               title="Sales Momentum Trend"
               hint={`Daily net sales progression in this time window · Total in Period: ${money(data.totals.netSales)}`}
@@ -283,95 +292,98 @@ export default function SalesReportPage() {
             </Panel>
 
             {/* Daily Sales Breakdown Table with Segmented Tabs, Maroon Header & Excel Export */}
-            <Panel
+            <DataTable
               title="Daily Sales Breakdown"
               hint="Itemized view by calendar date"
-            >
-              <DataTable
-                rows={dailyRows}
-                columns={dailyBreakdownColumns}
-                rowKey={(r) => r.bucket}
-                tabs={dailyTabs}
-                counterBadge={`${dailyRows.length} day(s) recorded`}
-                searchPlaceholder="Search by date (YYYY-MM-DD)..."
-                exportFileName="daily_sales_breakdown"
-                empty="No daily sales recorded in this period."
-                defaultPageSize={20}
-              />
-            </Panel>
+              serverSide={true}
+              rows={dailyRows}
+              columns={dailyBreakdownColumns}
+              rowKey={(r) => r.bucket}
+              tabs={dailyTabs}
+              activeTabKey={filters.tab || "all"}
+              onTabChange={(tab) =>
+                setFilters((prev) => ({ ...prev, tab: tab === "all" ? "" : tab, page: "1" }))
+              }
+              counterBadge={`${data.pagination?.total ?? dailyRows.length} day(s) recorded`}
+              page={Number(filters.page || 1)}
+              pageSize={Number(filters.limit || 10)}
+              totalItems={data.pagination?.total ?? dailyRows.length}
+              totalPages={data.pagination?.totalPages ?? 1}
+              onPageChange={(p) =>
+                setFilters((prev) => ({ ...prev, page: String(p) }))
+              }
+              onPageSizeChange={(s) =>
+                setFilters((prev) => ({ ...prev, limit: String(s), page: "1" }))
+              }
+              onExportAll={handleExportAll}
+              exportFileName="daily_sales_breakdown"
+              empty="No daily sales recorded in this period."
+              defaultPageSize={10}
+              isLoading={isFetching}
+            />
 
             {/* Detailed breakdowns */}
             <div className="grid gap-5 lg:grid-cols-2">
-              <Panel
+              <DataTable
                 title="Sales by Category"
                 hint="Product value share by department"
-              >
-                <DataTable
-                  rows={data.byCategory}
-                  columns={breakdownColumns("Category")}
-                  rowKey={(r) => r.key}
-                  searchPlaceholder="Filter category..."
-                  exportFileName="sales_by_category"
-                  empty="No category sales in this period."
-                />
-              </Panel>
+                counterBadge={`${data.byCategory.length} categories`}
+                rows={data.byCategory}
+                columns={breakdownColumns("Category")}
+                rowKey={(r) => r.key}
+                exportFileName="sales_by_category"
+                empty="No category sales in this period."
+                paginate={false}
+              />
 
-              <Panel
+              <DataTable
                 title="Sales by Brand"
                 hint="Brand momentum in this window"
-              >
-                <DataTable
-                  rows={data.byBrand}
-                  columns={breakdownColumns("Brand")}
-                  rowKey={(r) => r.key}
-                  searchPlaceholder="Filter brand..."
-                  exportFileName="sales_by_brand"
-                  empty="No brand sales in this period."
-                />
-              </Panel>
+                counterBadge={`${data.byBrand.length} brands`}
+                rows={data.byBrand}
+                columns={breakdownColumns("Brand")}
+                rowKey={(r) => r.key}
+                exportFileName="sales_by_brand"
+                empty="No brand sales in this period."
+                paginate={false}
+              />
 
-              <Panel
+              <DataTable
                 title="Sales by Payment Method"
                 hint="Customer payment preference breakdown"
-              >
-                <DataTable
-                  rows={data.byPaymentMethod}
-                  columns={breakdownColumns("Payment Method", false)}
-                  rowKey={(r) => r.key}
-                  searchPlaceholder="Filter payment method..."
-                  exportFileName="sales_by_payment_method"
-                  empty="No payments recorded in this period."
-                />
-              </Panel>
+                counterBadge={`${data.byPaymentMethod.length} methods`}
+                rows={data.byPaymentMethod}
+                columns={breakdownColumns("Payment Method", false)}
+                rowKey={(r) => r.key}
+                exportFileName="sales_by_payment_method"
+                empty="No payments recorded in this period."
+                paginate={false}
+              />
 
-              <Panel
+              <DataTable
                 title="Top Products"
                 hint="Highest revenue generating snacks"
-              >
-                <DataTable
-                  rows={data.topProducts}
-                  columns={breakdownColumns("Product")}
-                  rowKey={(r) => r.key}
-                  searchPlaceholder="Filter product..."
-                  exportFileName="top_products"
-                  empty="No products sold in this period."
-                />
-              </Panel>
+                counterBadge={`${data.topProducts.length} products`}
+                rows={data.topProducts}
+                columns={breakdownColumns("Product")}
+                rowKey={(r) => r.key}
+                exportFileName="top_products"
+                empty="No products sold in this period."
+                paginate={false}
+              />
 
               <div className="lg:col-span-2">
-                <Panel
+                <DataTable
                   title="Top Customers"
                   hint="Highest purchasing customers in this period"
-                >
-                  <DataTable
-                    rows={data.topCustomers}
-                    columns={breakdownColumns("Customer", false)}
-                    rowKey={(r) => r.key}
-                    searchPlaceholder="Filter customer..."
-                    exportFileName="top_customers"
-                    empty="No customers bought in this period."
-                  />
-                </Panel>
+                  counterBadge={`${data.topCustomers.length} customers`}
+                  rows={data.topCustomers}
+                  columns={breakdownColumns("Customer", false)}
+                  rowKey={(r) => r.key}
+                  exportFileName="top_customers"
+                  empty="No customers bought in this period."
+                  paginate={false}
+                />
               </div>
             </div>
 

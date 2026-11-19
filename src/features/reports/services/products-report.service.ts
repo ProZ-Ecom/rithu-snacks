@@ -8,6 +8,10 @@ export interface ProductsFilters {
   dateTo?: string;
   category?: string;
   brand?: string;
+  tab?: string;
+  search?: string;
+  page?: number | string;
+  limit?: number | string;
 }
 
 export interface ProductsTotals {
@@ -54,6 +58,12 @@ export interface ProductsReport {
   range: { from: string; to: string; days: number };
   totals: ProductsTotals;
   skus: SkuRow[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
   skusTruncated: boolean;
   byCategory: GroupRow[];
   byBrand: GroupRow[];
@@ -182,6 +192,31 @@ export const productsReportService = {
       zeroSaleCount(range, productWhere, hasProductFilter),
     ]);
 
+    let filteredSkus = [...skus];
+    if (filters.tab === "top") {
+      filteredSkus = filteredSkus.filter((r) => r.units >= 5);
+    } else if (filters.tab === "low_stock") {
+      filteredSkus = filteredSkus.filter((r) => r.stock <= 15);
+    }
+
+    if (filters.search?.trim()) {
+      const q = filters.search.trim().toLowerCase();
+      filteredSkus = filteredSkus.filter(
+        (r) =>
+          r.sku.toLowerCase().includes(q) ||
+          r.product.toLowerCase().includes(q) ||
+          r.variant.toLowerCase().includes(q) ||
+          r.category.toLowerCase().includes(q) ||
+          r.brand.toLowerCase().includes(q)
+      );
+    }
+
+    const page = Math.max(1, Number(filters.page || 1));
+    const limit = Math.max(1, Math.min(5000, Number(filters.limit || 10)));
+    const totalItems = filteredSkus.length;
+    const skip = (page - 1) * limit;
+    const paginatedSkus = filteredSkus.slice(skip, skip + limit);
+
     return {
       range: { from: range.fromISO, to: range.toISO, days: range.days },
       totals: {
@@ -197,8 +232,14 @@ export const productsReportService = {
         returnRate: ratio(returnedUnits, units),
         zeroSaleSkus: zeroSaleTotal,
       },
-      skus: skus.slice(0, SKU_LIMIT),
-      skusTruncated: skus.length > SKU_LIMIT,
+      skus: paginatedSkus,
+      pagination: {
+        page,
+        limit,
+        total: totalItems,
+        totalPages: Math.max(1, Math.ceil(totalItems / limit)),
+      },
+      skusTruncated: false,
       byCategory: groupRows(skus, (r) => r.category, revenue),
       byBrand: groupRows(skus, (r) => r.brand, revenue),
       bestSellers: [...skus].sort((a, b) => b.units - a.units).slice(0, 10),

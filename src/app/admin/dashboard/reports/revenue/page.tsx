@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useCallback } from "react";
 import {
   ArrowLeft,
   CreditCard,
@@ -17,7 +17,6 @@ import {
   CHART_COLORS,
   type Column,
   DataTable,
-  ExportButton,
   IdBadge,
   MetricCard,
   Note,
@@ -36,7 +35,7 @@ import {
   moneyExact,
   percent,
 } from "@/features/reports/components/report-ui";
-import { reportErrorMessage, useReport } from "@/features/reports/hooks/use-report";
+import { reportErrorMessage, useReport, useReportOptions } from "@/features/reports/hooks/use-report";
 import type {
   OutstandingRow,
   PaymentMethodRow,
@@ -94,10 +93,26 @@ export default function RevenueReportPage() {
   const { filters, setFilters, data, isLoading, isFetching, error, refetch } = useReport<RevenueReport>(
     "/api/admin/reports/revenue"
   );
+  const { data: options } = useReportOptions();
 
   const compare = data ? compareLabelFor(data.range.days) : undefined;
   const taxTotal = data?.tax.reduce((s, r) => s + r.taxAmount, 0) ?? 0;
   const unmapped = data?.tax.find((r) => r.hsnCode === "Not mapped");
+
+  const handleExportAll = useCallback(async () => {
+    const params = new URLSearchParams();
+    if (filters.dateFrom) params.set("dateFrom", filters.dateFrom);
+    if (filters.dateTo) params.set("dateTo", filters.dateTo);
+    if (filters.paymentMethod) params.set("paymentMethod", filters.paymentMethod);
+    if (filters.tab) params.set("tab", filters.tab);
+    params.set("page", "1");
+    params.set("limit", "5000");
+
+    const res = await fetch(`/api/admin/reports/revenue?${params.toString()}`);
+    if (!res.ok) throw new Error("Failed to export full revenue dataset");
+    const json = await res.json();
+    return (json.data?.outstanding ?? []) as OutstandingRow[];
+  }, [filters]);
 
   return (
     <PageContainer
@@ -126,20 +141,18 @@ export default function RevenueReportPage() {
             <RefreshCw className={`h-3.5 w-3.5 ${isFetching ? "animate-spin" : ""}`} />
             Refresh
           </Button>
-          {data?.tax && data.tax.length > 0 && (
-            <ExportButton
-              rows={data.tax}
-              columns={taxColumns}
-              fileName="gst_tax_summary"
-              label="Export Excel"
-            />
-          )}
         </div>
       }
     >
       <div className="flex flex-col gap-5">
         <Panel>
-          <ReportFilters value={filters} onChange={setFilters} />
+          <ReportFilters
+            value={filters}
+            onChange={setFilters}
+            extras={[
+              { name: "paymentMethod", label: "Payment Method", options: options?.paymentMethods ?? [] },
+            ]}
+          />
         </Panel>
 
         {error ? (
@@ -230,7 +243,7 @@ export default function RevenueReportPage() {
               />
             </div>
 
-            {/* Revenue Trend (matches Dashboard Spline Graph) */}
+            {/* Revenue Trend */}
             <Panel
               title="Revenue Progression"
               hint={`Daily revenue velocity over this period · Total: ${money(data.totals.netRevenue)}`}
@@ -248,72 +261,75 @@ export default function RevenueReportPage() {
             </Panel>
 
             {/* HSN-wise GST Summary */}
-            <Panel
+            <DataTable
               title="HSN-wise GST Breakdown"
               hint={`Tax compliance breakdown for GST filing · Total Tax: ${money(taxTotal)}`}
-            >
-              <DataTable
-                rows={data.tax}
-                columns={taxColumns}
-                rowKey={(r) => r.hsnCode}
-                searchPlaceholder="Filter HSN code or description..."
-                exportFileName="tax_breakdown"
-                empty="No taxable sales recorded in this period."
-              />
-            </Panel>
+              counterBadge={`${data.tax.length} slabs`}
+              rows={data.tax}
+              columns={taxColumns}
+              rowKey={(r) => r.hsnCode}
+              exportFileName="tax_breakdown"
+              empty="No taxable sales recorded in this period."
+              paginate={false}
+            />
 
             {/* Unpaid / Outstanding Orders Table with Segmented Tabs, Maroon Header & Excel Export */}
-            <Panel
+            <DataTable
               title="Outstanding / Pending Payments"
-              hint={
-                data.outstandingTruncated
-                  ? "Orders with pending amounts (capped at 300)"
-                  : "All orders where payment has not been fully cleared"
+              hint="All orders where payment has not been fully cleared"
+              serverSide={true}
+              rows={data.outstanding}
+              columns={outstandingColumns}
+              rowKey={(r) => r.id}
+              tabs={outstandingTabs}
+              activeTabKey={filters.tab || "all"}
+              onTabChange={(tab) =>
+                setFilters((prev) => ({ ...prev, tab: tab === "all" ? "" : tab, page: "1" }))
               }
-            >
-              <DataTable
-                rows={data.outstanding}
-                columns={outstandingColumns}
-                rowKey={(r) => r.id}
-                tabs={outstandingTabs}
-                counterBadge={`${data.outstanding.length} orders`}
-                searchPlaceholder="Search order number or customer..."
-                exportFileName="outstanding_orders"
-                empty="No outstanding amounts in this period."
-                emptyHint="All completed orders have been fully paid."
-                defaultPageSize={20}
-              />
-            </Panel>
+              counterBadge={`${data.pagination?.total ?? data.outstanding.length} orders`}
+              page={Number(filters.page || 1)}
+              pageSize={Number(filters.limit || 10)}
+              totalItems={data.pagination?.total ?? data.outstanding.length}
+              totalPages={data.pagination?.totalPages ?? 1}
+              onPageChange={(p) =>
+                setFilters((prev) => ({ ...prev, page: String(p) }))
+              }
+              onPageSizeChange={(s) =>
+                setFilters((prev) => ({ ...prev, limit: String(s), page: "1" }))
+              }
+              onExportAll={handleExportAll}
+              exportFileName="outstanding_orders"
+              empty="No outstanding amounts in this period."
+              emptyHint="All completed orders have been fully paid."
+              defaultPageSize={10}
+              isLoading={isFetching}
+            />
 
             {/* Payment Settlement Methods */}
             <div className="grid gap-5 lg:grid-cols-2">
-              <Panel
+              <DataTable
                 title="Payment Methods"
                 hint="Breakdown by collection channel"
-              >
-                <DataTable
-                  rows={data.paymentMethods}
-                  columns={methodColumns}
-                  rowKey={(r) => r.code}
-                  searchPlaceholder="Filter method..."
-                  exportFileName="payment_methods"
-                  empty="No payment methods recorded in this period."
-                />
-              </Panel>
+                counterBadge={`${data.paymentMethods.length} methods`}
+                rows={data.paymentMethods}
+                columns={methodColumns}
+                rowKey={(r) => r.code}
+                exportFileName="payment_methods"
+                empty="No payment methods recorded in this period."
+                paginate={false}
+              />
 
-              <Panel
+              <DataTable
                 title="Payment Status Rollup"
                 hint="Total invoiced value by payment status"
-              >
-                <DataTable
-                  rows={data.paymentStatus}
-                  columns={statusColumns}
-                  rowKey={(r) => r.status}
-                  searchPlaceholder="Filter status..."
-                  exportFileName="payment_status_rollup"
-                  empty="No payment status data in this period."
-                />
-              </Panel>
+                counterBadge={`${data.paymentStatus.length} statuses`}
+                rows={data.paymentStatus}
+                columns={statusColumns}
+                rowKey={(r) => r.status}
+                exportFileName="payment_status_rollup"
+                empty="No payment status data in this period."
+                paginate={false}
+              />
             </div>
 
             {unmapped && unmapped.taxAmount > 0 && (

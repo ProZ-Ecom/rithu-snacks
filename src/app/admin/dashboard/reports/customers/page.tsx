@@ -1,9 +1,8 @@
 "use client";
 
-import React from "react";
+import React, { useCallback } from "react";
 import {
   ArrowLeft,
-  MapPin,
   RefreshCw,
   Repeat,
   UserPlus,
@@ -16,7 +15,6 @@ import {
   CHART_COLORS,
   type Column,
   DataTable,
-  ExportButton,
   IdBadge,
   MetricCard,
   Note,
@@ -98,6 +96,21 @@ export default function CustomersReportPage() {
 
   const compare = data ? compareLabelFor(data.range.days) : undefined;
 
+  const handleExportAll = useCallback(async () => {
+    const params = new URLSearchParams();
+    if (filters.dateFrom) params.set("dateFrom", filters.dateFrom);
+    if (filters.dateTo) params.set("dateTo", filters.dateTo);
+    if (filters.customerType) params.set("customerType", filters.customerType);
+    if (filters.tab) params.set("tab", filters.tab);
+    params.set("page", "1");
+    params.set("limit", "5000");
+
+    const res = await fetch(`/api/admin/reports/customers?${params.toString()}`);
+    if (!res.ok) throw new Error("Failed to export full customers dataset");
+    const json = await res.json();
+    return (json.data?.topCustomers ?? []) as TopCustomerRow[];
+  }, [filters]);
+
   return (
     <PageContainer
       title="Customers Report"
@@ -125,20 +138,25 @@ export default function CustomersReportPage() {
             <RefreshCw className={`h-3.5 w-3.5 ${isFetching ? "animate-spin" : ""}`} />
             Refresh
           </Button>
-          {data?.topCustomers && data.topCustomers.length > 0 && (
-            <ExportButton
-              rows={data.topCustomers}
-              columns={customerColumns}
-              fileName="top_customers"
-              label="Export Excel"
-            />
-          )}
         </div>
       }
     >
       <div className="flex flex-col gap-5">
         <Panel>
-          <ReportFilters value={filters} onChange={setFilters} />
+          <ReportFilters
+            value={filters}
+            onChange={setFilters}
+            extras={[
+              {
+                name: "customerType",
+                label: "Customer Type",
+                options: [
+                  { value: "new", label: "New Customers" },
+                  { value: "returning", label: "Returning Buyers" },
+                ],
+              },
+            ]}
+          />
         </Panel>
 
         {error ? (
@@ -193,7 +211,7 @@ export default function CustomersReportPage() {
               />
             </div>
 
-            {/* Customer Trend (matches Dashboard Spline Graph) */}
+            {/* Customer Trend */}
             <Panel
               title="Customer Growth & Retention"
               hint={`Signups vs buyers over time · Total Buyers: ${count(data.totals.buyers)}`}
@@ -211,82 +229,88 @@ export default function CustomersReportPage() {
             </Panel>
 
             {/* Top Customers Table with Segmented Tabs, Maroon Header & Excel Export */}
-            <Panel
+            <DataTable
               title="Top Customers by Spend"
               hint="Highest spending customers in this period"
-            >
-              <DataTable
-                rows={data.topCustomers}
-                columns={customerColumns}
-                rowKey={(r) => r.id}
-                tabs={customerTabs}
-                counterBadge={`${data.topCustomers.length} buyers`}
-                searchPlaceholder="Search customer name, ID, or city..."
-                exportFileName="top_customers"
-                empty="No customer orders in this period."
-                defaultPageSize={20}
-              />
-            </Panel>
+              serverSide={true}
+              rows={data.topCustomers}
+              columns={customerColumns}
+              rowKey={(r) => r.id}
+              tabs={customerTabs}
+              activeTabKey={filters.tab || "all"}
+              onTabChange={(tab) =>
+                setFilters((prev) => ({ ...prev, tab: tab === "all" ? "" : tab, page: "1" }))
+              }
+              counterBadge={`${data.pagination?.total ?? data.topCustomers.length} buyers`}
+              page={Number(filters.page || 1)}
+              pageSize={Number(filters.limit || 10)}
+              totalItems={data.pagination?.total ?? data.topCustomers.length}
+              totalPages={data.pagination?.totalPages ?? 1}
+              onPageChange={(p) =>
+                setFilters((prev) => ({ ...prev, page: String(p) }))
+              }
+              onPageSizeChange={(s) =>
+                setFilters((prev) => ({ ...prev, limit: String(s), page: "1" }))
+              }
+              onExportAll={handleExportAll}
+              exportFileName="top_customers"
+              empty="No customer orders in this period."
+              defaultPageSize={10}
+              isLoading={isFetching}
+            />
 
             {/* Churn Risk */}
             {data.churnRisk.length > 0 && (
-              <Panel
+              <DataTable
                 title="Customers at Risk of Churn"
                 hint="Customers with strong historical spend who haven't ordered in 90+ days"
-              >
-                <DataTable
-                  rows={data.churnRisk}
-                  columns={customerColumns}
-                  rowKey={(r) => r.id}
-                  searchPlaceholder="Search quiet customers..."
-                  exportFileName="churn_risk_customers"
-                  empty="No customers at risk."
-                />
-              </Panel>
+                counterBadge={`${data.churnRisk.length} customers`}
+                rows={data.churnRisk}
+                columns={customerColumns}
+                rowKey={(r) => r.id}
+                exportFileName="churn_risk_customers"
+                empty="No customers at risk."
+                paginate={false}
+              />
             )}
 
             {/* Geography & Cohort Analysis */}
             <div className="grid gap-5 lg:grid-cols-3">
-              <Panel
+              <DataTable
                 title="Top States"
                 hint="Regional sales distribution"
-              >
-                <DataTable
-                  rows={data.byState}
-                  columns={geoColumns("State")}
-                  rowKey={(r) => r.key}
-                  searchPlaceholder="Filter state..."
-                  exportFileName="customers_by_state"
-                  empty="No state data."
-                />
-              </Panel>
+                counterBadge={`${data.byState.length} states`}
+                rows={data.byState}
+                columns={geoColumns("State")}
+                rowKey={(r) => r.key}
+                exportFileName="customers_by_state"
+                empty="No state data."
+                paginate={false}
+              />
 
-              <Panel
+              <DataTable
                 title="Top Cities"
                 hint="City-wise demand breakdown"
-              >
-                <DataTable
-                  rows={data.byCity}
-                  columns={geoColumns("City")}
-                  rowKey={(r) => r.key}
-                  searchPlaceholder="Filter city..."
-                  exportFileName="customers_by_city"
-                  empty="No city data."
-                />
-              </Panel>
+                counterBadge={`${data.byCity.length} cities`}
+                rows={data.byCity}
+                columns={geoColumns("City")}
+                rowKey={(r) => r.key}
+                exportFileName="customers_by_city"
+                empty="No city data."
+                paginate={false}
+              />
 
-              <Panel
+              <DataTable
                 title="Order Frequency Cohorts"
                 hint="First-time vs repeat cohort spread"
-              >
-                <DataTable
-                  rows={data.acquisition}
-                  columns={acquisitionColumns}
-                  rowKey={(r) => r.key}
-                  exportFileName="customer_cohorts"
-                  empty="No cohort data."
-                />
-              </Panel>
+                counterBadge={`${data.acquisition.length} cohorts`}
+                rows={data.acquisition}
+                columns={acquisitionColumns}
+                rowKey={(r) => r.key}
+                exportFileName="customer_cohorts"
+                empty="No cohort data."
+                paginate={false}
+              />
             </div>
 
             <Note>

@@ -18,6 +18,11 @@ import {
 export interface CustomersFilters {
   dateFrom?: string;
   dateTo?: string;
+  customerType?: string;
+  tab?: string;
+  search?: string;
+  page?: number | string;
+  limit?: number | string;
 }
 
 export interface CustomersTotals {
@@ -79,6 +84,12 @@ export interface CustomersReport {
   changes: Record<keyof CustomersTotals, number | null>;
   trend: CustomersTrendPoint[];
   topCustomers: TopCustomerRow[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
   byState: GeoRow[];
   byCity: GeoRow[];
   acquisition: AcquisitionRow[];
@@ -166,7 +177,7 @@ export const customersReportService = {
       totalsFor(range),
       totalsFor({ from: range.prevFrom, to: range.prevTo }),
       trend(range, bucket),
-      topCustomers(range),
+      topCustomers(range, filters),
       geography(range),
       acquisitionSplit(range),
       churnRisk(),
@@ -182,7 +193,8 @@ export const customersReportService = {
       previous,
       changes,
       trend: trendRows,
-      topCustomers: top,
+      topCustomers: top.list,
+      pagination: top.pagination,
       byState: geo.states,
       byCity: geo.cities,
       acquisition,
@@ -275,7 +287,10 @@ async function hydrateCustomers(
   });
 }
 
-async function topCustomers(range: ReportRange): Promise<TopCustomerRow[]> {
+async function topCustomers(
+  range: ReportRange,
+  filters: CustomersFilters
+): Promise<{ list: TopCustomerRow[]; pagination: { page: number; limit: number; total: number; totalPages: number } }> {
   const rows = await db.order.groupBy({
     by: ["userId"],
     where: soldWhere(range),
@@ -284,10 +299,9 @@ async function topCustomers(range: ReportRange): Promise<TopCustomerRow[]> {
     _min: { createdAt: true },
     _max: { createdAt: true },
     orderBy: { _sum: { totalAmount: "desc" } },
-    take: TOP_LIMIT,
   });
 
-  return hydrateCustomers(
+  const hydrated = await hydrateCustomers(
     rows.map((r) => ({
       userId: r.userId,
       orders: r._count._all,
@@ -296,6 +310,54 @@ async function topCustomers(range: ReportRange): Promise<TopCustomerRow[]> {
       last: r._max.createdAt ?? null,
     }))
   );
+
+  let filtered = hydrated;
+  if (filters.customerType === "new") {
+    filtered = filtered.filter((r) => {
+      if (!r.firstOrderAt) return false;
+      const d = new Date(r.firstOrderAt);
+      return d >= range.from && d <= range.to;
+    });
+  } else if (filters.customerType === "returning") {
+    filtered = filtered.filter((r) => {
+      if (!r.firstOrderAt) return r.orders > 1;
+      const d = new Date(r.firstOrderAt);
+      return d < range.from || r.orders > 1;
+    });
+  }
+
+  if (filters.tab === "repeat") {
+    filtered = filtered.filter((r) => r.orders >= 2);
+  } else if (filters.tab === "high_spend") {
+    filtered = filtered.filter((r) => r.revenue >= 1000);
+  }
+
+  if (filters.search?.trim()) {
+    const q = filters.search.trim().toLowerCase();
+    filtered = filtered.filter(
+      (r) =>
+        r.name.toLowerCase().includes(q) ||
+        (r.custId && r.custId.toLowerCase().includes(q)) ||
+        (r.phone && r.phone.toLowerCase().includes(q)) ||
+        (r.city && r.city.toLowerCase().includes(q))
+    );
+  }
+
+  const page = Math.max(1, Number(filters.page || 1));
+  const limit = Math.max(1, Math.min(5000, Number(filters.limit || 10)));
+  const total = filtered.length;
+  const skip = (page - 1) * limit;
+  const paginated = filtered.slice(skip, skip + limit);
+
+  return {
+    list: paginated,
+    pagination: {
+      page,
+      limit,
+      total,
+      totalPages: Math.max(1, Math.ceil(total / limit)),
+    },
+  };
 }
 
 /** Buyers with history but nothing recent - the follow-up list. */

@@ -9,6 +9,11 @@ export const GET = createApiHandler(
       const filters: CustomersFilters = {
         dateFrom: searchParams?.get("dateFrom") ?? undefined,
         dateTo: searchParams?.get("dateTo") ?? undefined,
+        customerType: searchParams?.get("customerType") ?? undefined,
+        search: searchParams?.get("search") ?? undefined,
+        page: searchParams?.get("page") ?? "1",
+        limit: searchParams?.get("limit") ?? "10",
+        tab: searchParams?.get("tab") ?? undefined,
       };
       return apiSuccess(await customersReportService.summary(filters));
     },

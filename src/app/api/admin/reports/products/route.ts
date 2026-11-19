@@ -11,6 +11,10 @@ export const GET = createApiHandler(
         dateTo: searchParams?.get("dateTo") ?? undefined,
         category: searchParams?.get("category") ?? undefined,
         brand: searchParams?.get("brand") ?? undefined,
+        search: searchParams?.get("search") ?? undefined,
+        page: searchParams?.get("page") ?? "1",
+        limit: searchParams?.get("limit") ?? "10",
+        tab: searchParams?.get("tab") ?? undefined,
       };
       return apiSuccess(await productsReportService.summary(filters));
     },

@@ -12,6 +12,9 @@ export const GET = createApiHandler(
         category: searchParams?.get("category") ?? undefined,
         brand: searchParams?.get("brand") ?? undefined,
         bucket: searchParams?.get("bucket") ?? undefined,
+        search: searchParams?.get("search") ?? undefined,
+        page: searchParams?.get("page") ?? "1",
+        limit: searchParams?.get("limit") ?? "10",
       };
       return apiSuccess(await inventoryReportService.summary(filters));
     },

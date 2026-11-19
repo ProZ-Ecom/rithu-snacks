@@ -11,6 +11,9 @@ export const GET = createApiHandler(
         dateTo: searchParams?.get("dateTo") ?? undefined,
         status: searchParams?.get("status") ?? undefined,
         paymentStatus: searchParams?.get("paymentStatus") ?? undefined,
+        search: searchParams?.get("search") ?? undefined,
+        page: searchParams?.get("page") ?? "1",
+        limit: searchParams?.get("limit") ?? "10",
       };
       return apiSuccess(await ordersReportService.summary(filters));
     },

@@ -11,6 +11,9 @@ export interface InventoryFilters {
   brand?: string;
   /** "low" | "out" | "dead" narrows the SKU table to that bucket. */
   bucket?: string;
+  search?: string;
+  page?: number | string;
+  limit?: number | string;
 }
 
 export interface InventoryTotals {
@@ -74,6 +77,12 @@ export interface InventoryReport {
   range: { from: string; to: string; days: number };
   totals: InventoryTotals;
   rows: StockRow[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
   rowsTruncated: boolean;
   movements: MovementRow[];
   ledger: LedgerRow[];
@@ -186,7 +195,25 @@ export const inventoryReportService = {
             ? deadStock
             : rows;
 
-    const sorted = [...visible].sort((a, b) => b.valueAtPrice - a.valueAtPrice);
+    let filteredList = [...visible];
+    if (filters.search?.trim()) {
+      const q = filters.search.trim().toLowerCase();
+      filteredList = filteredList.filter(
+        (r) =>
+          r.sku.toLowerCase().includes(q) ||
+          r.product.toLowerCase().includes(q) ||
+          r.brand.toLowerCase().includes(q) ||
+          r.category.toLowerCase().includes(q)
+      );
+    }
+
+    const sorted = [...filteredList].sort((a, b) => b.valueAtPrice - a.valueAtPrice);
+
+    const page = Math.max(1, Number(filters.page || 1));
+    const limit = Math.max(1, Math.min(5000, Number(filters.limit || 10)));
+    const totalItems = sorted.length;
+    const skip = (page - 1) * limit;
+    const paginatedRows = sorted.slice(skip, skip + limit);
 
     return {
       range: { from: range.fromISO, to: range.toISO, days: range.days },
@@ -204,8 +231,14 @@ export const inventoryReportService = {
         movementIn,
         movementOut,
       },
-      rows: sorted.slice(0, ROW_LIMIT),
-      rowsTruncated: sorted.length > ROW_LIMIT,
+      rows: paginatedRows,
+      pagination: {
+        page,
+        limit,
+        total: totalItems,
+        totalPages: Math.max(1, Math.ceil(totalItems / limit)),
+      },
+      rowsTruncated: false,
       movements: movementRows,
       ledger,
       ledgerTruncated: ledger.length === LEDGER_LIMIT,

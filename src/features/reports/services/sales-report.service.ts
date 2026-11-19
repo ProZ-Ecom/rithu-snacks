@@ -20,6 +20,11 @@ export interface SalesFilters {
   dateTo?: string;
   category?: string;
   brand?: string;
+  paymentMethod?: string;
+  search?: string;
+  page?: number | string;
+  limit?: number | string;
+  tab?: string;
 }
 
 export interface SalesTotals {
@@ -59,6 +64,13 @@ export interface SalesReport {
   previous: SalesTotals;
   changes: Record<keyof SalesTotals, number | null>;
   trend: SalesTrendPoint[];
+  dailyBreakdown: SalesTrendPoint[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
   byCategory: SalesBreakdownRow[];
   byBrand: SalesBreakdownRow[];
   byPaymentMethod: SalesBreakdownRow[];
@@ -79,7 +91,7 @@ const TOTAL_KEYS: (keyof SalesTotals)[] = [
 
 /** Shared WHERE for the order side of every sales figure. */
 function orderWhere(
-  _filters: SalesFilters,
+  filters: SalesFilters,
   categoryId: bigint | null,
   brandId: bigint | null,
   window: { from: Date; to: Date }
@@ -96,6 +108,9 @@ function orderWhere(
     ...SOLD_ORDER,
     createdAt: inRange(window),
     ...(itemFilters.length > 0 ? { items: { some: { AND: itemFilters } } } : {}),
+    ...(filters.paymentMethod
+      ? { payments: { some: { is_active: true, payment_methods: { code: filters.paymentMethod } } } }
+      : {}),
   };
 }
 
@@ -160,12 +175,38 @@ export const salesReportService = {
       TOTAL_KEYS.map((k) => [k, change(totals[k], previous[k])])
     ) as Record<keyof SalesTotals, number | null>;
 
+    // Filter & Paginate Daily Sales Breakdown for the table
+    let dailyList = [...trendRows].reverse();
+    if (filters.tab === "with_orders") {
+      dailyList = dailyList.filter((r) => r.orders > 0);
+    } else if (filters.tab === "high_sales") {
+      dailyList = dailyList.filter((r) => r.netSales >= 500);
+    }
+
+    if (filters.search?.trim()) {
+      const q = filters.search.trim().toLowerCase();
+      dailyList = dailyList.filter((r) => r.bucket.toLowerCase().includes(q));
+    }
+
+    const page = Math.max(1, Number(filters.page || 1));
+    const limit = Math.max(1, Math.min(5000, Number(filters.limit || 10)));
+    const totalDays = dailyList.length;
+    const skip = (page - 1) * limit;
+    const paginatedDaily = dailyList.slice(skip, skip + limit);
+
     return {
       range: { from: range.fromISO, to: range.toISO, days: range.days, bucket },
       totals,
       previous,
       changes,
       trend: trendRows,
+      dailyBreakdown: paginatedDaily,
+      pagination: {
+        page,
+        limit,
+        total: totalDays,
+        totalPages: Math.max(1, Math.ceil(totalDays / limit)),
+      },
       byCategory: withShare(itemRows.categories, totals.grossSales),
       byBrand: withShare(itemRows.brands, totals.grossSales),
       byPaymentMethod: withShare(paymentRows, totals.netSales),

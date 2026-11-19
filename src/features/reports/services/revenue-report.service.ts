@@ -18,6 +18,11 @@ import { PAYMENT_STATUS_LABELS } from "../lib/report-labels";
 export interface RevenueFilters {
   dateFrom?: string;
   dateTo?: string;
+  paymentMethod?: string;
+  tab?: string;
+  search?: string;
+  page?: number | string;
+  limit?: number | string;
 }
 
 export interface RevenueTotals {
@@ -90,6 +95,12 @@ export interface RevenueReport {
   paymentMethods: PaymentMethodRow[];
   paymentStatus: PaymentStatusRow[];
   outstanding: OutstandingRow[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
   outstandingTruncated: boolean;
 }
 
@@ -109,12 +120,18 @@ const TOTAL_KEYS: (keyof RevenueTotals)[] = [
 
 const OUTSTANDING_LIMIT = 300;
 
-function soldWhere(window: { from: Date; to: Date }): Prisma.OrderWhereInput {
-  return { ...SOLD_ORDER, createdAt: inRange(window) };
+function soldWhere(window: { from: Date; to: Date }, paymentMethod?: string): Prisma.OrderWhereInput {
+  return {
+    ...SOLD_ORDER,
+    createdAt: inRange(window),
+    ...(paymentMethod
+      ? { payments: { some: { is_active: true, payment_methods: { code: paymentMethod } } } }
+      : {}),
+  };
 }
 
-async function totalsFor(window: { from: Date; to: Date }): Promise<RevenueTotals> {
-  const where = soldWhere(window);
+async function totalsFor(window: { from: Date; to: Date }, paymentMethod?: string): Promise<RevenueTotals> {
+  const where = soldWhere(window, paymentMethod);
 
   const [orderAgg, couponAgg, paidAgg, refundAgg] = await Promise.all([
     db.order.aggregate({
@@ -164,13 +181,13 @@ export const revenueReportService = {
     const bucket = pickBucket(range.days);
 
     const [totals, previous, trendRows, taxRows, methods, statuses, due] = await Promise.all([
-      totalsFor(range),
-      totalsFor({ from: range.prevFrom, to: range.prevTo }),
+      totalsFor(range, filters.paymentMethod),
+      totalsFor({ from: range.prevFrom, to: range.prevTo }, filters.paymentMethod),
       trend(range, bucket),
       taxSummary(range),
       paymentMethods(range),
       paymentStatus(range),
-      outstandingOrders(range),
+      outstandingOrders(range, filters),
     ]);
 
     const changes = Object.fromEntries(
@@ -186,8 +203,9 @@ export const revenueReportService = {
       tax: taxRows,
       paymentMethods: methods,
       paymentStatus: statuses,
-      outstanding: due,
-      outstandingTruncated: due.length === OUTSTANDING_LIMIT,
+      outstanding: due.list,
+      pagination: due.pagination,
+      outstandingTruncated: false,
     };
   },
 };
@@ -334,11 +352,13 @@ async function paymentStatus(range: ReportRange): Promise<PaymentStatusRow[]> {
 }
 
 /** Delivered or in-flight orders whose successful payments do not cover the total. */
-async function outstandingOrders(range: ReportRange): Promise<OutstandingRow[]> {
+async function outstandingOrders(
+  range: ReportRange,
+  filters: RevenueFilters
+): Promise<{ list: OutstandingRow[]; pagination: { page: number; limit: number; total: number; totalPages: number } }> {
   const rows = await db.order.findMany({
     where: { ...soldWhere(range), payment_status: { in: ["pending", "failed"] } },
     orderBy: { createdAt: "desc" },
-    take: OUTSTANDING_LIMIT,
     select: {
       id: true,
       orderNumber: true,
@@ -352,7 +372,7 @@ async function outstandingOrders(range: ReportRange): Promise<OutstandingRow[]> 
     },
   });
 
-  return rows
+  let mapped = rows
     .map((o) => {
       const value = num(o.totalAmount);
       const paid = round2(o.payments.reduce((sum, p) => sum + num(p.amount), 0));
@@ -370,4 +390,37 @@ async function outstandingOrders(range: ReportRange): Promise<OutstandingRow[]> 
     })
     .filter((r) => r.due > 0)
     .sort((a, b) => b.due - a.due);
+
+  if (filters.tab === "partial") {
+    mapped = mapped.filter((r) => r.paid > 0);
+  } else if (filters.tab === "zero") {
+    mapped = mapped.filter((r) => r.paid === 0);
+  }
+
+  if (filters.search?.trim()) {
+    const q = filters.search.trim().toLowerCase();
+    mapped = mapped.filter(
+      (r) =>
+        r.orderNumber.toLowerCase().includes(q) ||
+        r.customer.toLowerCase().includes(q) ||
+        r.status.toLowerCase().includes(q) ||
+        r.paymentStatus.toLowerCase().includes(q)
+    );
+  }
+
+  const page = Math.max(1, Number(filters.page || 1));
+  const limit = Math.max(1, Math.min(5000, Number(filters.limit || 10)));
+  const total = mapped.length;
+  const skip = (page - 1) * limit;
+  const paginated = mapped.slice(skip, skip + limit);
+
+  return {
+    list: paginated,
+    pagination: {
+      page,
+      limit,
+      total,
+      totalPages: Math.max(1, Math.ceil(total / limit)),
+    },
+  };
 }

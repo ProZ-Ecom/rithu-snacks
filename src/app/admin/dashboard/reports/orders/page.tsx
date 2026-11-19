@@ -1,13 +1,12 @@
 "use client";
 
-import React from "react";
+import React, { useCallback } from "react";
 import {
   ArrowLeft,
   CheckCircle2,
   Clock,
   RefreshCw,
   ShoppingCart,
-  Truck,
   XCircle,
 } from "lucide-react";
 import Link from "next/link";
@@ -17,7 +16,6 @@ import {
   CHART_COLORS,
   type Column,
   DataTable,
-  ExportButton,
   IdBadge,
   MetricCard,
   Note,
@@ -34,7 +32,6 @@ import {
   dateLabel,
   days,
   formatCsvDateTime,
-  money,
   moneyExact,
   percent,
 } from "@/features/reports/components/report-ui";
@@ -153,6 +150,21 @@ export default function OrdersReportPage() {
 
   const compare = data ? compareLabelFor(data.range.days) : undefined;
 
+  const handleExportAll = useCallback(async () => {
+    const params = new URLSearchParams();
+    if (filters.dateFrom) params.set("dateFrom", filters.dateFrom);
+    if (filters.dateTo) params.set("dateTo", filters.dateTo);
+    if (filters.status) params.set("status", filters.status);
+    if (filters.paymentStatus) params.set("paymentStatus", filters.paymentStatus);
+    params.set("page", "1");
+    params.set("limit", "5000");
+
+    const res = await fetch(`/api/admin/reports/orders?${params.toString()}`);
+    if (!res.ok) throw new Error("Failed to export full orders dataset");
+    const json = await res.json();
+    return (json.data?.orders ?? []) as OrderListRow[];
+  }, [filters]);
+
   return (
     <PageContainer
       title="Orders Report"
@@ -180,14 +192,6 @@ export default function OrdersReportPage() {
             <RefreshCw className={`h-3.5 w-3.5 ${isFetching ? "animate-spin" : ""}`} />
             Refresh
           </Button>
-          {data?.orders && data.orders.length > 0 && (
-            <ExportButton
-              rows={data.orders}
-              columns={orderColumns}
-              fileName="orders_report"
-              label="Export Excel"
-            />
-          )}
         </div>
       }
     >
@@ -197,8 +201,8 @@ export default function OrdersReportPage() {
             value={filters}
             onChange={setFilters}
             extras={[
-              { name: "status", label: "Order status", options: ORDER_STATUS_OPTIONS },
-              { name: "paymentStatus", label: "Payment status", options: PAYMENT_STATUS_OPTIONS },
+              { name: "status", label: "Order Status", options: ORDER_STATUS_OPTIONS },
+              { name: "paymentStatus", label: "Payment Status", options: PAYMENT_STATUS_OPTIONS },
             ]}
           />
         </Panel>
@@ -256,7 +260,7 @@ export default function OrdersReportPage() {
               />
             </div>
 
-            {/* Volume Trend (matches Dashboard Spline Graph) */}
+            {/* Volume Trend */}
             <Panel
               title="Order Volume Trend"
               hint={`Order intake versus deliveries in this window · Total: ${count(data.totals.orders)} placed`}
@@ -274,87 +278,90 @@ export default function OrdersReportPage() {
             </Panel>
 
             {/* Order Pipeline Table with Segmented Status Tabs, Maroon Header & Excel Export */}
-            <Panel
+            <DataTable
               title="Order Activity"
-              hint={
-                data.ordersTruncated
-                  ? "Recent orders in this window (capped at 500)"
-                  : "All orders recorded in this window"
+              hint="All orders recorded in this window"
+              serverSide={true}
+              rows={data.orders}
+              columns={orderColumns}
+              rowKey={(r) => r.id}
+              tabs={orderTabs}
+              activeTabKey={filters.status || "all"}
+              onTabChange={(tab) =>
+                setFilters((prev) => ({ ...prev, status: tab === "all" ? "" : tab, page: "1" }))
               }
-            >
-              <DataTable
-                rows={data.orders}
-                columns={orderColumns}
-                rowKey={(r) => r.id}
-                tabs={orderTabs}
-                counterBadge={`${data.orders.length} orders`}
-                searchPlaceholder="Search order number or customer name..."
-                exportFileName="order_activity"
-                empty="No orders found in this period."
-                defaultPageSize={20}
-              />
-            </Panel>
+              counterBadge={`${data.pagination?.total ?? data.orders.length} orders`}
+              page={Number(filters.page || 1)}
+              pageSize={Number(filters.limit || 10)}
+              totalItems={data.pagination?.total ?? data.orders.length}
+              totalPages={data.pagination?.totalPages ?? 1}
+              onPageChange={(p) =>
+                setFilters((prev) => ({ ...prev, page: String(p) }))
+              }
+              onPageSizeChange={(s) =>
+                setFilters((prev) => ({ ...prev, limit: String(s), page: "1" }))
+              }
+              onExportAll={handleExportAll}
+              exportFileName="order_activity"
+              empty="No orders found in this period."
+              defaultPageSize={10}
+              isLoading={isFetching}
+            />
 
             {/* Pipeline Stage Breakdown */}
             <div className="grid gap-5 lg:grid-cols-2">
-              <Panel
+              <DataTable
                 title="Current Order Status"
                 hint="Distribution across fulfillment stages"
-              >
-                <DataTable
-                  rows={data.byStatus}
-                  columns={statusColumns("Status")}
-                  rowKey={(r) => r.status}
-                  searchPlaceholder="Filter status..."
-                  exportFileName="orders_by_status"
-                  empty="No orders in this period."
-                />
-              </Panel>
+                counterBadge={`${data.byStatus.length} statuses`}
+                rows={data.byStatus}
+                columns={statusColumns("Status")}
+                rowKey={(r) => r.status}
+                exportFileName="orders_by_status"
+                empty="No orders in this period."
+                paginate={false}
+              />
 
-              <Panel
+              <DataTable
                 title="Payment Status"
                 hint="Settlement status breakdown"
-              >
-                <DataTable
-                  rows={data.byPaymentStatus}
-                  columns={statusColumns("Payment Status")}
-                  rowKey={(r) => r.status}
-                  searchPlaceholder="Filter payment status..."
-                  exportFileName="orders_by_payment_status"
-                  empty="No payment data in this period."
-                />
-              </Panel>
+                counterBadge={`${data.byPaymentStatus.length} statuses`}
+                rows={data.byPaymentStatus}
+                columns={statusColumns("Payment Status")}
+                rowKey={(r) => r.status}
+                exportFileName="orders_by_payment_status"
+                empty="No payment data in this period."
+                paginate={false}
+              />
             </div>
 
             {/* Reasons for Drop-off */}
             <div className="grid gap-5 lg:grid-cols-2">
-              <Panel
+              <DataTable
                 title="Cancellation Reasons"
                 hint="Why orders did not go through"
-              >
-                <DataTable
-                  rows={data.cancellationReasons}
-                  columns={reasonColumns("Cancelled By")}
-                  rowKey={(r) => `${r.by}-${r.reason}`}
-                  exportFileName="cancellation_reasons"
-                  empty="No cancellations recorded in this period."
-                  emptyHint="All orders either progressed or are still open."
-                />
-              </Panel>
+                counterBadge={`${data.cancellationReasons.length} reasons`}
+                rows={data.cancellationReasons}
+                columns={reasonColumns("Cancelled By")}
+                rowKey={(r) => `${r.by}-${r.reason}`}
+                exportFileName="cancellation_reasons"
+                empty="No cancellations recorded in this period."
+                emptyHint="All orders either progressed or are still open."
+                paginate={false}
+              />
 
-              <Panel
+              <DataTable
                 title="Return Reasons"
                 hint="Why delivered items were returned"
-              >
-                <DataTable
-                  rows={data.returnReasons}
-                  columns={reasonColumns("Role", false)}
-                  rowKey={(r) => `${r.by}-${r.reason}`}
-                  exportFileName="return_reasons"
-                  empty="No returns recorded in this period."
-                  emptyHint="Every completed delivery stayed with the customer."
-                />
-              </Panel>
+                counterBadge={`${data.returnReasons.length} reasons`}
+                rows={data.returnReasons}
+                columns={reasonColumns("Role", false)}
+                rowKey={(r) => `${r.by}-${r.reason}`}
+                exportFileName="return_reasons"
+                empty="No returns recorded in this period."
+                emptyHint="Every completed delivery stayed with the customer."
+                paginate={false}
+              />
             </div>
 
             <Note>

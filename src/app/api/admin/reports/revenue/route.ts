@@ -9,6 +9,11 @@ export const GET = createApiHandler(
       const filters: RevenueFilters = {
         dateFrom: searchParams?.get("dateFrom") ?? undefined,
         dateTo: searchParams?.get("dateTo") ?? undefined,
+        paymentMethod: searchParams?.get("paymentMethod") ?? undefined,
+        search: searchParams?.get("search") ?? undefined,
+        page: searchParams?.get("page") ?? "1",
+        limit: searchParams?.get("limit") ?? "10",
+        tab: searchParams?.get("tab") ?? undefined,
       };
       return apiSuccess(await revenueReportService.summary(filters));
     },

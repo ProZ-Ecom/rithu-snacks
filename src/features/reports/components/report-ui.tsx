@@ -384,7 +384,7 @@ export function Panel({
   return (
     <section
       className={cn(
-        "rounded-2xl border border-stone-200/90 bg-white p-5 sm:p-6 shadow-2xs overflow-visible",
+        "rounded-2xl border border-stone-200/90 bg-white p-3 sm:p-2 shadow-2xs overflow-visible",
         className
       )}
     >
@@ -569,6 +569,8 @@ export function PaymentIndicator({ method }: { method?: string | null }) {
 export function DataTable<T>({
   columns,
   rows,
+  title,
+  hint,
   rowKey,
   empty = "Nothing in this period.",
   emptyHint,
@@ -576,16 +578,30 @@ export function DataTable<T>({
   searchPlaceholder,
   exportFileName,
   exportSheetName = "Report",
-  showSearch,
+  showSearch = false,
   showExport,
-  defaultPageSize = 20,
+  defaultPageSize = 10,
+  paginate,
   tabs,
   activeTabKey,
   onTabChange,
   counterBadge,
+  serverSide = false,
+  page: serverPage,
+  pageSize: serverPageSize,
+  totalItems: serverTotalItems,
+  totalPages: serverTotalPages,
+  searchValue,
+  onPageChange,
+  onPageSizeChange,
+  onSearchChange,
+  onExportAll,
+  isLoading,
 }: {
   columns: Column<T>[];
   rows: T[];
+  title?: React.ReactNode;
+  hint?: React.ReactNode;
   rowKey?: (row: T) => string;
   empty?: string;
   emptyHint?: string;
@@ -596,60 +612,139 @@ export function DataTable<T>({
   showSearch?: boolean;
   showExport?: boolean;
   defaultPageSize?: number;
+  paginate?: boolean;
   tabs?: DataTableTab<T>[];
   activeTabKey?: string;
   onTabChange?: (key: string) => void;
   counterBadge?: React.ReactNode;
+  serverSide?: boolean;
+  page?: number;
+  pageSize?: number;
+  totalItems?: number;
+  totalPages?: number;
+  searchValue?: string;
+  onPageChange?: (page: number) => void;
+  onPageSizeChange?: (pageSize: number) => void;
+  onSearchChange?: (search: string) => void;
+  onExportAll?: () => Promise<T[]>;
+  isLoading?: boolean;
 }) {
   const [internalTab, setInternalTab] = React.useState<string>(tabs && tabs.length > 0 ? tabs[0].key : "all");
-  const [search, setSearch] = React.useState("");
-  const [page, setPage] = React.useState(1);
-  const [pageSize, setPageSize] = React.useState(defaultPageSize);
+  const [internalSearch, setInternalSearch] = React.useState("");
+  const [internalPage, setInternalPage] = React.useState(1);
+  const [internalPageSize, setInternalPageSize] = React.useState(defaultPageSize);
   const [sortCol, setSortCol] = React.useState<number | null>(null);
   const [sortDir, setSortDir] = React.useState<"asc" | "desc">("asc");
 
-  const currentTabKey = activeTabKey ?? internalTab;
+  const currentTabKey = activeTabKey !== undefined ? activeTabKey : internalTab;
+  const currentSearch = searchValue !== undefined ? searchValue : internalSearch;
+  const currentPage = serverSide && serverPage !== undefined ? serverPage : internalPage;
+  const currentPageSize = serverSide && serverPageSize !== undefined ? serverPageSize : internalPageSize;
 
   const handleTabClick = (key: string) => {
     setInternalTab(key);
     onTabChange?.(key);
-    setPage(1);
+    if (serverSide) {
+      onPageChange?.(1);
+    } else {
+      setInternalPage(1);
+    }
   };
 
-  // Filter rows by active tab
+  const handleSearchChange = (val: string) => {
+    const trimmed = val.trim();
+    if (serverSide) {
+      onSearchChange?.(trimmed);
+      onPageChange?.(1);
+    } else {
+      setInternalSearch(trimmed);
+      setInternalPage(1);
+    }
+  };
+
+  const handlePageSizeChange = (newSize: number) => {
+    if (serverSide) {
+      onPageSizeChange?.(newSize);
+      onPageChange?.(1);
+    } else {
+      setInternalPageSize(newSize);
+      setInternalPage(1);
+    }
+  };
+
+  const handlePageChange = (newPage: number) => {
+    if (serverSide) {
+      onPageChange?.(newPage);
+    } else {
+      setInternalPage(newPage);
+    }
+  };
+
+  // Filter rows by active tab (only in client-side mode)
   const tabFilteredRows = React.useMemo(() => {
-    if (!tabs || tabs.length === 0) return rows;
+    if (serverSide || !tabs || tabs.length === 0) return rows;
     const currentTab = tabs.find((t) => t.key === currentTabKey);
     if (!currentTab || !currentTab.filter) return rows;
     return rows.filter(currentTab.filter);
-  }, [rows, tabs, currentTabKey]);
+  }, [rows, tabs, currentTabKey, serverSide]);
 
-  const shouldShowSearch = showSearch ?? (rows.length > 5 || !!searchPlaceholder);
+  const shouldShowSearch = showSearch;
   const shouldShowExport = showExport ?? !!exportFileName;
 
-  // Filter rows by search keyword across all columns
+  // Filter rows by search keyword across all columns and row properties (client-side only)
   const filteredRows = React.useMemo(() => {
-    if (!search.trim()) return tabFilteredRows;
-    const q = search.trim().toLowerCase();
-    return tabFilteredRows.filter((row) =>
-      columns.some((c) => {
-        let val: any = "";
-        if (c.csv) {
-          val = c.csv(row);
-        } else {
-          const raw = c.cell(row);
-          if (typeof raw === "string" || typeof raw === "number") {
-            val = raw;
-          } else if (raw && typeof raw === "object" && "props" in (raw as any)) {
-            val = (raw as any).props?.children;
+    if (serverSide || !currentSearch.trim()) return tabFilteredRows;
+    const q = currentSearch.trim().toLowerCase();
+    const tokens = q.split(/\s+/).filter(Boolean);
+
+    return tabFilteredRows.filter((row) => {
+      const searchableParts: string[] = [];
+
+      // 1. Check all primitive values in the row object itself
+      if (row && typeof row === "object") {
+        for (const val of Object.values(row as Record<string, any>)) {
+          if (val == null) continue;
+          if (typeof val === "string" || typeof val === "number") {
+            searchableParts.push(String(val).toLowerCase());
           }
         }
-        return String(val ?? "").toLowerCase().includes(q);
-      })
-    );
-  }, [tabFilteredRows, search, columns]);
+      }
 
-  // Sort rows
+      // 2. Check all columns (csv accessor or cell content)
+      for (const col of columns) {
+        if (col.csv) {
+          const csvVal = col.csv(row);
+          if (csvVal != null) searchableParts.push(String(csvVal).toLowerCase());
+        } else if (col.cell) {
+          const cellVal = col.cell(row);
+          if (typeof cellVal === "string" || typeof cellVal === "number") {
+            searchableParts.push(String(cellVal).toLowerCase());
+          } else if (cellVal && typeof cellVal === "object" && "props" in (cellVal as any)) {
+            const props = (cellVal as any).props;
+            if (props) {
+              if (typeof props.children === "string" || typeof props.children === "number") {
+                searchableParts.push(String(props.children).toLowerCase());
+              }
+              if (typeof props.status === "string") {
+                searchableParts.push(props.status.toLowerCase());
+              }
+              if (typeof props.method === "string") {
+                searchableParts.push(props.method.toLowerCase());
+              }
+              if (typeof props.label === "string") {
+                searchableParts.push(props.label.toLowerCase());
+              }
+            }
+          }
+        }
+      }
+
+      const combinedText = searchableParts.join(" ");
+      return tokens.every((token) => combinedText.includes(token));
+    });
+  }, [tabFilteredRows, currentSearch, columns, serverSide]);
+
+  // Sort rows (client-side)
   const sortedRows = React.useMemo(() => {
     if (sortCol === null || sortCol >= columns.length) return filteredRows;
     const c = columns[sortCol];
@@ -677,18 +772,30 @@ export function DataTable<T>({
     });
   }, [filteredRows, sortCol, sortDir, columns]);
 
-  // Reset page when search or pageSize changes
+  // Reset internal page when search or pageSize changes in client-side mode
   React.useEffect(() => {
-    setPage(1);
-  }, [search, pageSize, currentTabKey]);
+    if (!serverSide) {
+      setInternalPage(1);
+    }
+  }, [currentSearch, currentPageSize, currentTabKey, serverSide]);
 
   // Pagination bounds
-  const totalItems = sortedRows.length;
-  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
-  const safePage = Math.min(page, totalPages);
-  const startEntry = totalItems > 0 ? (safePage - 1) * pageSize + 1 : 0;
-  const endEntry = totalItems > 0 ? Math.min(safePage * pageSize, totalItems) : 0;
-  const paginatedRows = sortedRows.slice((safePage - 1) * pageSize, safePage * pageSize);
+  const totalItems = serverSide && serverTotalItems !== undefined ? serverTotalItems : sortedRows.length;
+  const shouldPaginate = paginate !== undefined ? paginate : serverSide || totalItems > defaultPageSize;
+  const totalPages =
+    serverSide && serverTotalPages !== undefined
+      ? serverTotalPages
+      : Math.max(1, Math.ceil(totalItems / currentPageSize));
+  const safePage = Math.min(currentPage, totalPages);
+  const startEntry = totalItems > 0 ? (safePage - 1) * currentPageSize + 1 : 0;
+  const endEntry = totalItems > 0 ? Math.min(safePage * currentPageSize, totalItems) : 0;
+  
+  // In server-side mode, rows are already paginated by backend; otherwise slice only when paginated
+  const displayedRows = serverSide
+    ? rows
+    : shouldPaginate
+    ? sortedRows.slice((safePage - 1) * currentPageSize, safePage * currentPageSize)
+    : sortedRows;
 
   const handleSort = (idx: number) => {
     if (sortCol === idx) {
@@ -720,37 +827,51 @@ export function DataTable<T>({
   );
 
   return (
-    <div className="w-full flex-1 min-h-[220px] flex flex-col justify-between rounded-2xl overflow-hidden border border-stone-200/90 bg-white shadow-2xs relative">
+    <div className="w-full flex-1 min-h-[140px] flex flex-col justify-between rounded-2xl overflow-visible border border-stone-200/90 bg-white shadow-2xs relative">
       {/* Top Controls Row matching Recent Dispatch Orders */}
-      {(tabs || shouldShowSearch || shouldShowExport || counterBadge) && (
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3.5 sm:px-5 border-b border-stone-100 bg-white">
-          {/* Left Side: Search Input Bar */}
-          <div className="flex items-center gap-2.5 flex-1 max-w-sm">
-            {shouldShowSearch && (
-              <SearchInput
-                placeholder={searchPlaceholder ?? "Search records..."}
-                value={search}
-                onSearch={(val) => {
-                  setSearch(val.trim());
-                  setPage(1);
-                }}
-                className="w-full sm:w-64 bg-stone-50 border-stone-200/80 rounded-xl text-xs h-9"
-              />
-            )}
+      {(title || hint || tabs || shouldShowSearch || shouldShowExport || counterBadge) && (
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3.5 sm:px-5 border-b border-stone-100 bg-white rounded-t-2xl">
+          {/* Left Side: Title, Counter Badge & Hint */}
+          <div className="flex flex-col gap-0.5 flex-1 min-w-0">
+            <div className="flex items-center gap-2.5 flex-wrap">
+              {title && (
+                <h3 className="text-sm sm:text-base font-bold text-stone-900 tracking-tight truncate">
+                  {title}
+                </h3>
+              )}
+              {counterBadge && (
+                <span className="rounded-full bg-stone-100 px-2.5 py-0.5 text-xs font-semibold text-stone-600 shrink-0">
+                  {counterBadge}
+                </span>
+              )}
+              {shouldShowSearch && (
+                <div className="ml-2 w-full sm:w-64">
+                  <SearchInput
+                    placeholder={searchPlaceholder ?? "Search records..."}
+                    value={currentSearch}
+                    debounceMs={300}
+                    onSearch={handleSearchChange}
+                    className="w-full bg-stone-50 border-stone-200/80 rounded-xl text-xs h-9"
+                  />
+                </div>
+              )}
+              {isLoading && <span className="text-[11px] font-medium text-stone-400 animate-pulse">Loading…</span>}
+            </div>
+            {hint && <p className="text-xs text-stone-500">{hint}</p>}
           </div>
 
-          {/* Right Side: Counter Badge, Segmented Tabs & Single Export Excel Button */}
-          <div className="flex flex-wrap items-center gap-2.5 self-end sm:self-auto">
-            {counterBadge && (
-              <span className="rounded-full bg-stone-100 px-2.5 py-0.5 text-xs font-semibold text-stone-600">
-                {counterBadge}
-              </span>
-            )}
+          {/* Right Side: Segmented Tabs & Single Export Excel Button */}
+          <div className="flex flex-wrap items-center gap-2.5 self-end sm:self-auto shrink-0">
             {tabs && tabs.length > 0 && (
               <div className="inline-flex items-center rounded-xl bg-stone-100/90 p-1 border border-stone-200/80 overflow-x-auto max-w-full scrollbar-none">
                 {tabs.map((tab) => {
                   const isActive = currentTabKey === tab.key;
-                  const tabCount = tab.count !== undefined ? tab.count : tab.filter ? rows.filter(tab.filter).length : rows.length;
+                  const tabCount =
+                    tab.count !== undefined
+                      ? tab.count
+                      : tab.filter && !serverSide
+                      ? rows.filter(tab.filter).length
+                      : undefined;
                   return (
                     <button
                       key={tab.key}
@@ -764,7 +885,9 @@ export function DataTable<T>({
                       )}
                     >
                       {tab.label}
-                      <span className="ml-1 text-[11px] opacity-75">({tabCount})</span>
+                      {tabCount !== undefined && (
+                        <span className="ml-1 text-[11px] opacity-75">({tabCount})</span>
+                      )}
                     </button>
                   );
                 })}
@@ -772,10 +895,12 @@ export function DataTable<T>({
             )}
             {shouldShowExport && (
               <ExportExcelButton
-                data={sortedRows}
+                data={serverSide ? rows : sortedRows}
+                fetchData={onExportAll}
                 filename={exportFileName ?? "report_export"}
                 sheetName={exportSheetName.slice(0, 31)}
                 columns={exportColumns}
+                size="sm"
               />
             )}
           </div>
@@ -786,7 +911,7 @@ export function DataTable<T>({
       <div className={cn("min-h-0 flex-1 flex flex-col relative", maxHeight)}>
         <div className="flex-1 min-h-0 overflow-x-auto overflow-y-auto overscroll-auto scrollbar-thin">
           <table className="w-full min-w-[640px] table-auto caption-bottom text-left text-xs sm:text-sm border-separate border-spacing-0">
-            <thead className="sticky top-0 z-30 shadow-xs bg-[#7A2224]">
+            <thead className="sticky top-0 z-10 shadow-xs bg-[#7A2224]">
               <tr>
                 {columns.map((c, i) => (
                   <th
@@ -802,7 +927,7 @@ export function DataTable<T>({
                       <span>{c.header}</span>
                       <span className="text-white/80">
                         {sortCol === i ? (
-                           sortDir === "asc" ? (
+                          sortDir === "asc" ? (
                             <ChevronUp className="h-3.5 w-3.5 text-white" />
                           ) : (
                             <ChevronDown className="h-3.5 w-3.5 text-white" />
@@ -817,8 +942,8 @@ export function DataTable<T>({
               </tr>
             </thead>
             <tbody className="divide-y divide-stone-100">
-              {paginatedRows.length > 0 ? (
-                paginatedRows.map((row, idx) => (
+              {displayedRows.length > 0 ? (
+                displayedRows.map((row, idx) => (
                   <tr
                     key={rowKey ? rowKey(row) : idx}
                     className="hover:bg-amber-50/30 transition-colors group"
@@ -853,56 +978,62 @@ export function DataTable<T>({
         </div>
       </div>
 
-      {/* Sticky Bottom Pagination */}
-      <div className="sticky bottom-0 z-20 flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 sm:px-5 py-2.5 flex-shrink-0 border-t border-stone-100 bg-white shadow-2xs">
-        <div className="flex flex-wrap items-center gap-3 sm:gap-6 text-xs text-stone-600">
-          <p className="font-medium">
-            Showing {startEntry}–{endEntry} of {totalItems} entries
-          </p>
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-medium text-stone-500 whitespace-nowrap">
-              Rows per page:
-            </span>
-            <div className="w-20">
-              <Select
-                value={String(pageSize)}
-                onValueChange={(val) => {
-                  setPageSize(Number(val));
-                  setPage(1);
-                }}
-                options={[10, 20, 30, 50].map((opt) => ({
-                  value: String(opt),
-                  label: String(opt),
-                }))}
-                size="sm"
-                placement="top"
-                className="h-8 rounded-lg font-semibold text-xs border-stone-200"
-              />
+      {/* Sticky Bottom Pagination with Custom UI Select for Rows per Page - only shown for paginated tables */}
+      {shouldPaginate && (
+        <div className="sticky bottom-0 z-40 flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 sm:px-5 py-2.5 flex-shrink-0 border-t border-stone-100 bg-white rounded-b-2xl shadow-2xs">
+          <div className="flex flex-wrap items-center gap-3 sm:gap-6 text-xs text-stone-600">
+            <p className="font-medium">
+              Showing {startEntry}–{endEntry} of {totalItems} entries
+            </p>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-medium text-stone-500 whitespace-nowrap">
+                Rows per page:
+              </span>
+              <div className="w-[74px]">
+                <Select
+                  size="sm"
+                  placement="top"
+                  value={String(currentPageSize)}
+                  onValueChange={(val) => {
+                    handlePageSizeChange(Number(val));
+                  }}
+                  options={[
+                    { value: "10", label: "10" },
+                    { value: "20", label: "20" },
+                    { value: "30", label: "30" },
+                    { value: "50", label: "50" },
+                    { value: "100", label: "100" },
+                  ]}
+                  className="h-8 text-xs font-semibold rounded-lg bg-white border-stone-200/90 shadow-2xs hover:bg-stone-50"
+                  dropdownClassName="!min-w-[74px] w-[74px] bg-white border border-stone-200 shadow-2xl rounded-xl z-[100] p-1"
+                  aria-label="Rows per page"
+                />
+              </div>
             </div>
           </div>
+          <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
+            <button
+              type="button"
+              onClick={() => handlePageChange(Math.max(1, safePage - 1))}
+              disabled={safePage <= 1}
+              className="grid h-8 w-8 place-items-center rounded-lg border border-stone-200 bg-white text-xs font-semibold text-stone-700 transition-colors hover:bg-stone-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <span className="text-xs font-semibold text-stone-700 px-1">
+              {safePage} / {totalPages}
+            </span>
+            <button
+              type="button"
+              onClick={() => handlePageChange(Math.min(totalPages, safePage + 1))}
+              disabled={safePage >= totalPages}
+              className="grid h-8 w-8 place-items-center rounded-lg border border-stone-200 bg-white text-xs font-semibold text-stone-700 transition-colors hover:bg-stone-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
         </div>
-        <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
-          <button
-            type="button"
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-            disabled={safePage <= 1}
-            className="grid h-8 w-8 place-items-center rounded-lg border border-stone-200 bg-white text-xs font-semibold text-stone-700 transition-colors hover:bg-stone-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </button>
-          <span className="text-xs font-semibold text-stone-700 px-1">
-            {safePage} / {totalPages}
-          </span>
-          <button
-            type="button"
-            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-            disabled={safePage >= totalPages}
-            className="grid h-8 w-8 place-items-center rounded-lg border border-stone-200 bg-white text-xs font-semibold text-stone-700 transition-colors hover:bg-stone-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
-          >
-            <ChevronRight className="h-4 w-4" />
-          </button>
-        </div>
-      </div>
+      )}
     </div>
   );
 }

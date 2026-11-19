@@ -1,10 +1,9 @@
 "use client";
 
-import React from "react";
+import React, { useCallback } from "react";
 import {
   ArrowLeft,
   Package,
-  PackageX,
   RefreshCw,
   ShoppingBag,
   TrendingUp,
@@ -16,7 +15,6 @@ import { PageContainer } from "@/components/admin/PageContainer";
 import {
   type Column,
   DataTable,
-  ExportButton,
   IdBadge,
   MetricCard,
   Panel,
@@ -74,6 +72,22 @@ export default function ProductsReportPage() {
   );
   const { data: options } = useReportOptions();
 
+  const handleExportAll = useCallback(async () => {
+    const params = new URLSearchParams();
+    if (filters.dateFrom) params.set("dateFrom", filters.dateFrom);
+    if (filters.dateTo) params.set("dateTo", filters.dateTo);
+    if (filters.category) params.set("category", filters.category);
+    if (filters.brand) params.set("brand", filters.brand);
+    if (filters.tab) params.set("tab", filters.tab);
+    params.set("page", "1");
+    params.set("limit", "5000");
+
+    const res = await fetch(`/api/admin/reports/products?${params.toString()}`);
+    if (!res.ok) throw new Error("Failed to export full products dataset");
+    const json = await res.json();
+    return (json.data?.skus ?? []) as SkuRow[];
+  }, [filters]);
+
   return (
     <PageContainer
       title="Products Report"
@@ -101,14 +115,6 @@ export default function ProductsReportPage() {
             <RefreshCw className={`h-3.5 w-3.5 ${isFetching ? "animate-spin" : ""}`} />
             Refresh
           </Button>
-          {data?.skus && data.skus.length > 0 && (
-            <ExportButton
-              rows={data.skus}
-              columns={skuColumns}
-              fileName="products_performance"
-              label="Export Excel"
-            />
-          )}
         </div>
       }
     >
@@ -171,106 +177,107 @@ export default function ProductsReportPage() {
             </div>
 
             {/* Complete SKU Performance Table with Segmented Tabs, Maroon Header & Excel Export */}
-            <Panel
+            <DataTable
               title="SKU Performance"
-              hint={
-                data.skusTruncated
-                  ? "SKUs sorted by revenue in this period (capped at 1,000)"
-                  : "Every SKU that recorded an order in this window"
+              hint="Every SKU that recorded an order in this window"
+              serverSide={true}
+              rows={data.skus}
+              columns={skuColumns}
+              rowKey={(r) => r.key}
+              tabs={skuTabs}
+              activeTabKey={filters.tab || "all"}
+              onTabChange={(tab) =>
+                setFilters((prev) => ({ ...prev, tab: tab === "all" ? "" : tab, page: "1" }))
               }
-            >
-              <DataTable
-                rows={data.skus}
-                columns={skuColumns}
-                rowKey={(r) => r.key}
-                tabs={skuTabs}
-                counterBadge={`${data.skus.length} SKUs`}
-                searchPlaceholder="Search by SKU, product name, or variant..."
-                exportFileName="sku_sales_performance"
-                empty="No products sold in this period."
-                defaultPageSize={20}
-              />
-            </Panel>
+              counterBadge={`${data.pagination?.total ?? data.skus.length} SKUs`}
+              page={Number(filters.page || 1)}
+              pageSize={Number(filters.limit || 10)}
+              totalItems={data.pagination?.total ?? data.skus.length}
+              totalPages={data.pagination?.totalPages ?? 1}
+              onPageChange={(p) =>
+                setFilters((prev) => ({ ...prev, page: String(p) }))
+              }
+              onPageSizeChange={(s) =>
+                setFilters((prev) => ({ ...prev, limit: String(s), page: "1" }))
+              }
+              onExportAll={handleExportAll}
+              exportFileName="sku_sales_performance"
+              empty="No products sold in this period."
+              defaultPageSize={10}
+              isLoading={isFetching}
+            />
 
             {/* Best Sellers and Slow Movers */}
             <div className="grid gap-5 lg:grid-cols-2">
-              <Panel
+              <DataTable
                 title="Top 10 Best Sellers"
                 hint="Products by unit velocity"
-              >
-                <DataTable
-                  rows={data.bestSellers}
-                  columns={compactSkuColumns}
-                  rowKey={(r) => r.key}
-                  exportFileName="top_best_sellers"
-                  empty="No sales in this period."
-                />
-              </Panel>
+                counterBadge={`${data.bestSellers.length} SKUs`}
+                rows={data.bestSellers}
+                columns={compactSkuColumns}
+                rowKey={(r) => r.key}
+                exportFileName="top_best_sellers"
+                empty="No sales in this period."
+                paginate={false}
+              />
 
-              <Panel
+              <DataTable
                 title="Slowest Moving SKUs"
                 hint="Sold products with lowest unit volume"
-              >
-                <DataTable
-                  rows={data.slowMovers}
-                  columns={compactSkuColumns}
-                  rowKey={(r) => r.key}
-                  exportFileName="slow_moving_products"
-                  empty="No slow movers found."
-                />
-              </Panel>
+                counterBadge={`${data.slowMovers.length} SKUs`}
+                rows={data.slowMovers}
+                columns={compactSkuColumns}
+                rowKey={(r) => r.key}
+                exportFileName="slow_moving_products"
+                empty="No slow movers found."
+                paginate={false}
+              />
             </div>
 
             {/* Zero-sale SKUs */}
             {data.zeroSale.length > 0 && (
-              <Panel
+              <DataTable
                 title="Zero-Sale SKUs"
                 hint={
                   data.zeroSaleTruncated
                     ? `Active products with zero sales in this window (${data.totals.zeroSaleSkus} total, showing first ${data.zeroSale.length})`
                     : `Active products with zero sales in this window (${data.totals.zeroSaleSkus} total)`
                 }
-              >
-                <DataTable
-                  rows={data.zeroSale}
-                  columns={compactSkuColumns}
-                  rowKey={(r) => r.key}
-                  searchPlaceholder="Search dead catalog items..."
-                  exportFileName="zero_sale_skus"
-                  empty="All active products had sales in this period."
-                />
-              </Panel>
+                counterBadge={`${data.zeroSale.length} SKUs`}
+                rows={data.zeroSale}
+                columns={compactSkuColumns}
+                rowKey={(r) => r.key}
+                exportFileName="zero_sale_skus"
+                empty="All active products had sales in this period."
+                paginate={false}
+              />
             )}
 
             {/* Category and Brand Rollups */}
             <div className="grid gap-5 lg:grid-cols-2">
-              <Panel
+              <DataTable
                 title="Revenue by Category"
                 hint="Category share of merchandise sales"
-              >
-                <DataTable
-                  rows={data.byCategory}
-                  columns={groupColumns("Category")}
-                  rowKey={(r) => r.key}
-                  searchPlaceholder="Filter category..."
-                  exportFileName="category_sales"
-                  empty="No category sales."
-                />
-              </Panel>
+                counterBadge={`${data.byCategory.length} categories`}
+                rows={data.byCategory}
+                columns={groupColumns("Category")}
+                rowKey={(r) => r.key}
+                exportFileName="category_sales"
+                empty="No category sales."
+                paginate={false}
+              />
 
-              <Panel
+              <DataTable
                 title="Revenue by Brand"
                 hint="Brand distribution in this period"
-              >
-                <DataTable
-                  rows={data.byBrand}
-                  columns={groupColumns("Brand")}
-                  rowKey={(r) => r.key}
-                  searchPlaceholder="Filter brand..."
-                  exportFileName="brand_sales"
-                  empty="No brand sales."
-                />
-              </Panel>
+                counterBadge={`${data.byBrand.length} brands`}
+                rows={data.byBrand}
+                columns={groupColumns("Brand")}
+                rowKey={(r) => r.key}
+                exportFileName="brand_sales"
+                empty="No brand sales."
+                paginate={false}
+              />
             </div>
           </>
         )}

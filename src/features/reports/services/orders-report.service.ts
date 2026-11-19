@@ -28,6 +28,9 @@ export interface OrdersFilters {
   dateTo?: string;
   status?: string;
   paymentStatus?: string;
+  search?: string;
+  page?: number | string;
+  limit?: number | string;
 }
 
 export interface OrdersTotals {
@@ -80,6 +83,13 @@ export interface OrderListRow {
   deliveryDays: number | null;
 }
 
+export interface ReportPagination {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+}
+
 export interface OrdersReport {
   range: { from: string; to: string; days: number; bucket: Bucket };
   totals: OrdersTotals;
@@ -91,6 +101,7 @@ export interface OrdersReport {
   returnReasons: ReasonRow[];
   trend: OrdersTrendPoint[];
   orders: OrderListRow[];
+  pagination: ReportPagination;
   ordersTruncated: boolean;
 }
 
@@ -224,7 +235,7 @@ export const ordersReportService = {
     const where = orderWhere(filters, range);
     const prevWhere = orderWhere(filters, { from: range.prevFrom, to: range.prevTo });
 
-    const [current, previous, paymentGroups, cancellation, returns, trendRows, list] = await Promise.all([
+    const [current, previous, paymentGroups, cancellation, returns, trendRows, orderData] = await Promise.all([
       totalsFor(where),
       totalsFor(prevWhere),
       db.order.groupBy({
@@ -236,7 +247,7 @@ export const ordersReportService = {
       cancellationReasons(where),
       returnReasons(range),
       trend(range, bucket, filters),
-      orderList(where),
+      orderList(where, filters),
     ]);
 
     const changes = Object.fromEntries(
@@ -262,8 +273,9 @@ export const ordersReportService = {
       cancellationReasons: cancellation,
       returnReasons: returns,
       trend: trendRows,
-      orders: list,
-      ordersTruncated: list.length === ORDER_LIST_LIMIT,
+      orders: orderData.list,
+      pagination: orderData.pagination,
+      ordersTruncated: false,
     };
   },
 };
@@ -360,31 +372,95 @@ async function trend(
   );
 }
 
-async function orderList(where: Prisma.OrderWhereInput): Promise<OrderListRow[]> {
-  const rows = await db.order.findMany({
-    where,
-    orderBy: { createdAt: "desc" },
-    take: ORDER_LIST_LIMIT,
-    select: {
-      id: true,
-      orderNumber: true,
-      placed_at: true,
-      createdAt: true,
-      updatedAt: true,
-      order_status: true,
-      payment_status: true,
-      totalAmount: true,
-      user: { select: { name: true, cust_id: true } },
-      order_status_history: {
-        where: { status: "delivered" },
-        take: 1,
-        select: { created_at: true },
-      },
-      _count: { select: { items: true } },
-    },
-  });
+async function orderList(
+  where: Prisma.OrderWhereInput,
+  filters: OrdersFilters
+): Promise<{ list: OrderListRow[]; pagination: ReportPagination }> {
+  const page = Math.max(1, Number(filters.page || 1));
+  const limit = Math.max(1, Math.min(5000, Number(filters.limit || 10)));
+  const skip = (page - 1) * limit;
 
-  return rows.map((o) => {
+  const whereConditions: Prisma.OrderWhereInput[] = [where];
+
+  // Tab / Status filter for list:
+  if (filters.status && filters.status !== "all") {
+    if (filters.status === "in_progress") {
+      whereConditions.push({ order_status: { in: [...IN_PROGRESS_STATUSES] as any } });
+    } else {
+      whereConditions.push({ order_status: filters.status as Prisma.OrderWhereInput["order_status"] });
+    }
+  }
+
+  // Search filter across orderNumber, customer name, custId, items, status, phone:
+  if (filters.search?.trim()) {
+    const q = filters.search.trim();
+    const searchOr: Prisma.OrderWhereInput[] = [
+      { orderNumber: { contains: q } },
+      { user: { name: { contains: q } } },
+      { user: { cust_id: { contains: q } } },
+      { user: { phone: { contains: q } } },
+      { items: { some: { product_name_snapshot: { contains: q } } } },
+      { items: { some: { sku_snapshot: { contains: q } } } },
+    ];
+
+    const matchingStatuses = (
+      [
+        "pending",
+        "confirmed",
+        "processing",
+        "packed",
+        "shipped",
+        "out_for_delivery",
+        "delivered",
+        "cancelled",
+        "returned",
+      ] as const
+    ).filter((s) => s.includes(q.toLowerCase()));
+    if (matchingStatuses.length > 0) {
+      searchOr.push({ order_status: { in: matchingStatuses as any } });
+    }
+
+    const matchingPayment = (["pending", "paid", "failed", "refunded"] as const).filter((s) =>
+      s.includes(q.toLowerCase())
+    );
+    if (matchingPayment.length > 0) {
+      searchOr.push({ payment_status: { in: matchingPayment as any } });
+    }
+
+    whereConditions.push({ OR: searchOr });
+  }
+
+  const listWhere: Prisma.OrderWhereInput =
+    whereConditions.length === 1 ? whereConditions[0] : { AND: whereConditions };
+
+  const [total, rows] = await Promise.all([
+    db.order.count({ where: listWhere }),
+    db.order.findMany({
+      where: listWhere,
+      orderBy: { createdAt: "desc" },
+      skip,
+      take: limit,
+      select: {
+        id: true,
+        orderNumber: true,
+        placed_at: true,
+        createdAt: true,
+        updatedAt: true,
+        order_status: true,
+        payment_status: true,
+        totalAmount: true,
+        user: { select: { name: true, cust_id: true } },
+        order_status_history: {
+          where: { status: "delivered" },
+          take: 1,
+          select: { created_at: true },
+        },
+        _count: { select: { items: true } },
+      },
+    }),
+  ]);
+
+  const list = rows.map((o) => {
     const start = o.placed_at ?? o.createdAt;
     const deliveredAt = o.order_status === "delivered" ? (o.order_status_history[0]?.created_at ?? o.updatedAt) : null;
     const deliveryDays =
@@ -404,4 +480,14 @@ async function orderList(where: Prisma.OrderWhereInput): Promise<OrderListRow[]>
       deliveryDays,
     };
   });
+
+  return {
+    list,
+    pagination: {
+      page,
+      limit,
+      total,
+      totalPages: Math.max(1, Math.ceil(total / limit)),
+    },
+  };
 }

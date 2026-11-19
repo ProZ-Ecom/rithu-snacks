@@ -1,11 +1,9 @@
 "use client";
 
-import React from "react";
+import React, { useCallback } from "react";
 import {
   AlertTriangle,
-  Archive,
   ArrowLeft,
-  PackageX,
   RefreshCw,
   Warehouse,
 } from "lucide-react";
@@ -15,7 +13,6 @@ import { PageContainer } from "@/components/admin/PageContainer";
 import {
   type Column,
   DataTable,
-  ExportButton,
   IdBadge,
   MetricCard,
   Note,
@@ -106,6 +103,22 @@ export default function InventoryReportPage() {
   );
   const { data: options } = useReportOptions();
 
+  const handleExportAll = useCallback(async () => {
+    const params = new URLSearchParams();
+    if (filters.dateFrom) params.set("dateFrom", filters.dateFrom);
+    if (filters.dateTo) params.set("dateTo", filters.dateTo);
+    if (filters.category) params.set("category", filters.category);
+    if (filters.brand) params.set("brand", filters.brand);
+    if (filters.bucket) params.set("bucket", filters.bucket);
+    params.set("page", "1");
+    params.set("limit", "5000");
+
+    const res = await fetch(`/api/admin/reports/inventory?${params.toString()}`);
+    if (!res.ok) throw new Error("Failed to export full inventory dataset");
+    const json = await res.json();
+    return (json.data?.rows ?? []) as StockRow[];
+  }, [filters]);
+
   return (
     <PageContainer
       title="Inventory Report"
@@ -133,14 +146,6 @@ export default function InventoryReportPage() {
             <RefreshCw className={`h-3.5 w-3.5 ${isFetching ? "animate-spin" : ""}`} />
             Refresh
           </Button>
-          {data?.rows && data.rows.length > 0 && (
-            <ExportButton
-              rows={data.rows}
-              columns={stockColumns}
-              fileName="inventory_stock_valuation"
-              label="Export Excel"
-            />
-          )}
         </div>
       }
     >
@@ -201,57 +206,61 @@ export default function InventoryReportPage() {
             </div>
 
             {/* Complete Stock Table with Segmented Tabs, Maroon Header & Excel Export */}
-            <Panel
+            <DataTable
               title="Stock Levels & Valuation"
-              hint={
-                data.rowsTruncated
-                  ? "SKUs sorted by valuation (capped at 1,000)"
-                  : "All active inventory SKUs"
+              hint="All active inventory SKUs"
+              serverSide={true}
+              rows={data.rows}
+              columns={stockColumns}
+              rowKey={(r) => r.key}
+              tabs={stockTabs}
+              activeTabKey={filters.bucket || "all"}
+              onTabChange={(tab) =>
+                setFilters((prev) => ({ ...prev, bucket: tab === "all" ? "" : tab, page: "1" }))
               }
-            >
-              <DataTable
-                rows={data.rows}
-                columns={stockColumns}
-                rowKey={(r) => r.key}
-                tabs={stockTabs}
-                counterBadge={`${data.rows.length} SKUs`}
-                searchPlaceholder="Search by SKU, product name, or brand..."
-                exportFileName="stock_valuation"
-                empty="No inventory items found."
-                defaultPageSize={20}
-              />
-            </Panel>
+              counterBadge={`${data.pagination?.total ?? data.rows.length} SKUs`}
+              page={Number(filters.page || 1)}
+              pageSize={Number(filters.limit || 10)}
+              totalItems={data.pagination?.total ?? data.rows.length}
+              totalPages={data.pagination?.totalPages ?? 1}
+              onPageChange={(p) =>
+                setFilters((prev) => ({ ...prev, page: String(p) }))
+              }
+              onPageSizeChange={(s) =>
+                setFilters((prev) => ({ ...prev, limit: String(s), page: "1" }))
+              }
+              onExportAll={handleExportAll}
+              exportFileName="stock_valuation"
+              empty="No inventory items found."
+              defaultPageSize={10}
+              isLoading={isFetching}
+            />
 
             {/* Movement Summary & Recent Ledger */}
             <div className="grid gap-5 lg:grid-cols-2">
-              <Panel
+              <DataTable
                 title="Stock Movement Summary"
                 hint="Inflow and outflow by transaction category"
-              >
-                <DataTable
-                  rows={data.movements}
-                  columns={movementColumns}
-                  rowKey={(r) => r.key}
-                  searchPlaceholder="Filter movement..."
-                  exportFileName="stock_movements"
-                  empty="No stock movements recorded in this period."
-                />
-              </Panel>
+                counterBadge={`${data.movements.length} categories`}
+                rows={data.movements}
+                columns={movementColumns}
+                rowKey={(r) => r.key}
+                exportFileName="stock_movements"
+                empty="No stock movements recorded in this period."
+                paginate={false}
+              />
 
-              <Panel
+              <DataTable
                 title="Stock Ledger Audit"
                 hint="Recent inventory transactions and balance adjustments"
-              >
-                <DataTable
-                  rows={data.ledger}
-                  columns={ledgerColumns}
-                  rowKey={(r) => r.id}
-                  searchPlaceholder="Filter by SKU or type..."
-                  exportFileName="inventory_ledger"
-                  empty="No transactions in this period."
-                  defaultPageSize={10}
-                />
-              </Panel>
+                counterBadge={`${data.ledger.length} entries`}
+                rows={data.ledger}
+                columns={ledgerColumns}
+                rowKey={(r) => r.id}
+                exportFileName="inventory_ledger"
+                empty="No transactions in this period."
+                paginate={false}
+              />
             </div>
 
             <Note>

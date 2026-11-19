@@ -8,6 +8,7 @@ export interface ReportOption {
 export interface ReportOptions {
   categories: ReportOption[];
   brands: ReportOption[];
+  paymentMethods: ReportOption[];
 }
 
 /**
@@ -16,7 +17,7 @@ export interface ReportOptions {
  */
 export const reportOptionsService = {
   async all(): Promise<ReportOptions> {
-    const [categories, brands] = await Promise.all([
+    const [categories, brands, methods] = await Promise.all([
       db.productCategory.findMany({
         where: { isActive: true, deleted_at: null },
         orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
@@ -26,6 +27,11 @@ export const reportOptionsService = {
         where: { isActive: true, deleted_at: null },
         orderBy: { name: "asc" },
         select: { uuid: true, id: true, name: true },
+      }),
+      db.payment_methods.findMany({
+        where: { is_active: true },
+        orderBy: { name: "asc" },
+        select: { id: true, name: true, code: true },
       }),
     ]);
 
@@ -45,6 +51,7 @@ export const reportOptionsService = {
         };
       }),
       brands: brands.map((b) => ({ value: b.uuid ?? String(b.id), label: b.name })),
+      paymentMethods: methods.map((m) => ({ value: m.code, label: m.name })),
     };
   },
 };
