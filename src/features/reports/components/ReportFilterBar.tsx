@@ -4,6 +4,7 @@ import React from "react";
 import { Calendar } from "lucide-react";
 import type { ReportPeriod } from "../types";
 import { cn } from "@/lib/utils";
+import { formatDateRange } from "./report-ui";
 
 interface ReportFilterBarProps {
   period: ReportPeriod;
@@ -63,10 +64,12 @@ export function ReportFilterBar({
         </div>
 
         {/* Date Window Label */}
-        {dateRangeLabel && (
+        {(dateRangeLabel || (startDate && endDate)) && (
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground bg-muted/40 px-2.5 py-1 rounded-md border border-border/50">
             <Calendar className="h-3.5 w-3.5 text-primary" />
-            <span className="font-medium text-foreground">{dateRangeLabel}</span>
+            <span className="font-medium text-foreground">
+              {dateRangeLabel || formatDateRange(startDate, endDate)}
+            </span>
           </div>
         )}
       </div>

@@ -249,7 +249,8 @@ export default function ProductsReportPage() {
                 rowKey={(r) => r.key}
                 exportFileName="zero_sale_skus"
                 empty="All active products had sales in this period."
-                paginate={false}
+                paginate={true}
+                defaultPageSize={10}
               />
             )}
 

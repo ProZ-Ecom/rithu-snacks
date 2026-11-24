@@ -49,6 +49,7 @@ export interface TopCustomerRow {
   id: string;
   name: string;
   custId: string | null;
+  email: string | null;
   phone: string | null;
   city: string | null;
   orders: number;
@@ -262,6 +263,7 @@ async function hydrateCustomers(
       id: true,
       name: true,
       cust_id: true,
+      email: true,
       phone: true,
       addresses: { where: { is_active: true }, select: { city: true }, take: 1 },
     },
@@ -275,6 +277,7 @@ async function hydrateCustomers(
       id: String(r.userId),
       name: u?.name ?? `Customer #${r.userId}`,
       custId: u?.cust_id ?? null,
+      email: u?.email ?? null,
       phone: u?.phone ?? null,
       city: u?.addresses?.[0]?.city ?? null,
       orders: r.orders,
@@ -337,6 +340,7 @@ async function topCustomers(
     filtered = filtered.filter(
       (r) =>
         r.name.toLowerCase().includes(q) ||
+        (r.email && r.email.toLowerCase().includes(q)) ||
         (r.custId && r.custId.toLowerCase().includes(q)) ||
         (r.phone && r.phone.toLowerCase().includes(q)) ||
         (r.city && r.city.toLowerCase().includes(q))

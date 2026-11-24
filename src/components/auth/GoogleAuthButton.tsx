@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { signIn } from "next-auth/react";
 import { Spinner } from "@/components/ui/spinner";
 
@@ -16,15 +16,72 @@ export function GoogleAuthButton({
   className = "",
 }: GoogleAuthButtonProps) {
   const [isLoading, setIsLoading] = useState(false);
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Clear timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+  }, []);
+
+  // Listen to browser navigation/visibility events to reset loading state
+  // when navigating back from Google OAuth (bfcache restore, popstate, tab visibility)
+  useEffect(() => {
+    const handleReset = () => {
+      setIsLoading(false);
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+    };
+
+    // 1. pageshow fires when page is displayed/restored from browser Back-Forward Cache (bfcache)
+    window.addEventListener("pageshow", handleReset);
+
+    // 2. popstate fires on browser back/forward history navigation
+    window.addEventListener("popstate", handleReset);
+
+    // 3. visibilitychange fires when user navigates back to tab / browser becomes visible
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        handleReset();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    // 4. focus fires when the window/tab regains focus
+    window.addEventListener("focus", handleReset);
+
+    return () => {
+      window.removeEventListener("pageshow", handleReset);
+      window.removeEventListener("popstate", handleReset);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("focus", handleReset);
+    };
+  }, []);
 
   const handleGoogleSignIn = async () => {
     try {
       setIsLoading(true);
+
+      // Safety timeout: if redirect is aborted or user stays on page, auto-reset after 8s
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      timeoutRef.current = setTimeout(() => {
+        setIsLoading(false);
+      }, 8000);
+
       await signIn("google", {
         callbackUrl,
       });
     } catch {
       setIsLoading(false);
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
     }
   };
 

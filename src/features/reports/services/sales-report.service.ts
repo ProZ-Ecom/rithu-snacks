@@ -185,7 +185,16 @@ export const salesReportService = {
 
     if (filters.search?.trim()) {
       const q = filters.search.trim().toLowerCase();
-      dailyList = dailyList.filter((r) => r.bucket.toLowerCase().includes(q));
+      dailyList = dailyList.filter((r) => {
+        if (r.bucket.toLowerCase().includes(q)) return true;
+        const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(r.bucket);
+        if (match) {
+          const d = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+          const formatted = d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }).toLowerCase();
+          if (formatted.includes(q)) return true;
+        }
+        return false;
+      });
     }
 
     const page = Math.max(1, Number(filters.page || 1));

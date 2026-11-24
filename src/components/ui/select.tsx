@@ -68,27 +68,54 @@ const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
     const searchInputRef = React.useRef<HTMLInputElement>(null);
     const hiddenSelectRef = React.useRef<HTMLSelectElement | null>(null);
 
-    // Calculate smart placement when opened
-    React.useEffect(() => {
-      if (isOpen) {
-        if (placement === "top") {
-          setEffectivePlacement("top");
-        } else if (placement === "bottom") {
+    // Calculate smart placement when opened or on scroll/resize
+    const updatePlacement = React.useCallback(() => {
+      if (!containerRef.current) return;
+      const rect = containerRef.current.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const spaceAbove = rect.top;
+
+      // Estimated height of dropdown list: ~36px per option + padding (~20px), clamped to max-h-56 (224px)
+      const estimatedHeight = Math.min(options.length * 36 + 20, 224);
+      const buffer = 16; // breathing room from viewport edge
+
+      if (placement === "top") {
+        // Preferred top, but flip to bottom if it would touch or exceed the top of viewport
+        if (spaceAbove < estimatedHeight + buffer && spaceBelow > spaceAbove) {
           setEffectivePlacement("bottom");
         } else {
-          if (containerRef.current) {
-            const rect = containerRef.current.getBoundingClientRect();
-            const spaceBelow = window.innerHeight - rect.bottom;
-            const spaceAbove = rect.top;
-            if (spaceBelow < 240 && spaceAbove > spaceBelow) {
-              setEffectivePlacement("top");
-            } else {
-              setEffectivePlacement("bottom");
-            }
-          }
+          setEffectivePlacement("top");
+        }
+      } else if (placement === "bottom") {
+        // Preferred bottom, but flip to top if it would touch or exceed the bottom of viewport
+        if (spaceBelow < estimatedHeight + buffer && spaceAbove > spaceBelow) {
+          setEffectivePlacement("top");
+        } else {
+          setEffectivePlacement("bottom");
+        }
+      } else {
+        // "auto": if it fits below comfortably, open bottom; otherwise if it fits above, open top; else pick side with more space
+        if (spaceBelow >= estimatedHeight + buffer) {
+          setEffectivePlacement("bottom");
+        } else if (spaceAbove >= estimatedHeight + buffer) {
+          setEffectivePlacement("top");
+        } else {
+          setEffectivePlacement(spaceAbove > spaceBelow ? "top" : "bottom");
         }
       }
-    }, [isOpen, placement]);
+    }, [placement, options.length]);
+
+    React.useEffect(() => {
+      if (isOpen) {
+        updatePlacement();
+        window.addEventListener("resize", updatePlacement);
+        window.addEventListener("scroll", updatePlacement, true);
+        return () => {
+          window.removeEventListener("resize", updatePlacement);
+          window.removeEventListener("scroll", updatePlacement, true);
+        };
+      }
+    }, [isOpen, updatePlacement]);
 
     // Sync controlled value if passed
     React.useEffect(() => {

@@ -15,7 +15,6 @@ import {
   CHART_COLORS,
   type Column,
   DataTable,
-  IdBadge,
   MetricCard,
   Note,
   Panel,
@@ -45,9 +44,9 @@ import type {
 const customerColumns: Column<TopCustomerRow>[] = [
   { header: "CUSTOMER", cell: (r) => <span className="font-semibold text-stone-900">{r.name}</span>, csv: (r) => r.name },
   {
-    header: "CUSTOMER ID",
-    cell: (r) => (r.custId ? <IdBadge>{r.custId}</IdBadge> : <span className="text-stone-400">—</span>),
-    csv: (r) => r.custId,
+    header: "EMAIL ID",
+    cell: (r) => <span className="text-stone-700">{r.email ?? "—"}</span>,
+    csv: (r) => r.email,
   },
   { header: "PHONE", cell: (r) => <span className="font-mono text-xs text-stone-600">{r.phone ?? "—"}</span>, csv: (r) => r.phone },
   { header: "CITY", cell: (r) => <span className="text-stone-700">{r.city ?? "—"}</span>, csv: (r) => r.city },
