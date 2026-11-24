@@ -66,7 +66,9 @@ export function resolveReportDateRange(
         const [ey, em, ed] = customEnd.split("-").map(Number);
         startDate = new Date(sy, sm - 1, sd, 0, 0, 0, 0);
         endDate = new Date(ey, em - 1, ed, 23, 59, 59, 999);
-        label = `${customStart} to ${customEnd}`;
+        const startFormatted = startDate.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+        const endFormatted = endDate.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+        label = `${startFormatted} – ${endFormatted}`;
       } else {
         // Fallback to last 30 days
         startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);

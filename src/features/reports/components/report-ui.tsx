@@ -45,9 +45,19 @@ export const days = (n: number | null | undefined) => (n == null ? "—" : `${n}
 
 export function dateLabel(value: string | null | undefined) {
   if (!value) return "—";
-  const d = new Date(value);
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
+  const d = match
+    ? new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]))
+    : new Date(value);
   if (Number.isNaN(d.getTime())) return "—";
   return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+}
+
+export function formatDateRange(from?: string | null, to?: string | null): string {
+  if (!from && !to) return "—";
+  if (!from) return dateLabel(to);
+  if (!to) return dateLabel(from);
+  return `${dateLabel(from)} – ${dateLabel(to)}`;
 }
 
 /** Turns a bucket key (2026-11-06, 2026-11 or a Monday) into something readable on an axis. */
@@ -56,7 +66,10 @@ export function bucketLabel(key: string, bucket: "day" | "week" | "month") {
     const [y, m] = key.split("-");
     return new Date(Number(y), Number(m) - 1, 1).toLocaleDateString("en-IN", { month: "short", year: "2-digit" });
   }
-  const d = new Date(key);
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(key);
+  const d = match
+    ? new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]))
+    : new Date(key);
   if (Number.isNaN(d.getTime())) return key;
   const short = d.toLocaleDateString("en-IN", { day: "2-digit", month: "short" });
   return bucket === "week" ? `w/c ${short}` : short;
@@ -310,8 +323,8 @@ export function ReportFilters({ value, onChange, extras = [], children }: Report
         {value.dateFrom && value.dateTo && (
           <div className="inline-flex items-center gap-1.5 rounded-xl border border-stone-200/80 bg-stone-50 px-3 py-1.5 text-xs font-medium text-stone-700 shrink-0">
             <Calendar className="h-3.5 w-3.5 text-stone-500" />
-            <span className="font-mono text-[11px] font-semibold text-stone-800">
-              {value.dateFrom} to {value.dateTo}
+            <span className="text-xs font-semibold text-stone-800">
+              {formatDateRange(value.dateFrom, value.dateTo)}
             </span>
           </div>
         )}
@@ -827,7 +840,7 @@ export function DataTable<T>({
   );
 
   return (
-    <div className="w-full flex-1 min-h-[140px] flex flex-col justify-between rounded-2xl overflow-visible border border-stone-200/90 bg-white shadow-2xs relative">
+    <div className="w-full flex flex-col rounded-2xl border border-stone-200/90 bg-white shadow-2xs relative">
       {/* Top Controls Row matching Recent Dispatch Orders */}
       {(title || hint || tabs || shouldShowSearch || shouldShowExport || counterBadge) && (
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3.5 sm:px-5 border-b border-stone-100 bg-white rounded-t-2xl">
@@ -908,8 +921,8 @@ export function DataTable<T>({
       )}
 
       {/* Table Body with Deep Maroon Header */}
-      <div className={cn("min-h-0 flex-1 flex flex-col relative", maxHeight)}>
-        <div className="flex-1 min-h-0 overflow-x-auto overflow-y-auto overscroll-auto scrollbar-thin">
+      <div className={cn("relative w-full", maxHeight && cn("overflow-y-auto overscroll-auto scrollbar-thin", maxHeight))}>
+        <div className="w-full overflow-x-auto scrollbar-thin">
           <table className="w-full min-w-[640px] table-auto caption-bottom text-left text-xs sm:text-sm border-separate border-spacing-0">
             <thead className="sticky top-0 z-10 shadow-xs bg-[#7A2224]">
               <tr>
@@ -978,21 +991,21 @@ export function DataTable<T>({
         </div>
       </div>
 
-      {/* Sticky Bottom Pagination with Custom UI Select for Rows per Page - only shown for paginated tables */}
+      {/* Bottom Pagination */}
       {shouldPaginate && (
-        <div className="sticky bottom-0 z-40 flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 sm:px-5 py-2.5 flex-shrink-0 border-t border-stone-100 bg-white rounded-b-2xl shadow-2xs">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 sm:px-5 py-3 flex-shrink-0 border-t border-stone-100 bg-white rounded-b-2xl">
           <div className="flex flex-wrap items-center gap-3 sm:gap-6 text-xs text-stone-600">
-            <p className="font-medium">
-              Showing {startEntry}–{endEntry} of {totalItems} entries
+            <p className="font-medium text-stone-600">
+              Showing <span className="font-semibold text-stone-900">{startEntry}</span>–<span className="font-semibold text-stone-900">{endEntry}</span> of <span className="font-semibold text-stone-900">{totalItems}</span> entries
             </p>
             <div className="flex items-center gap-2">
               <span className="text-xs font-medium text-stone-500 whitespace-nowrap">
                 Rows per page:
               </span>
-              <div className="w-[74px]">
+              <div className="w-[78px]">
                 <Select
                   size="sm"
-                  placement="top"
+                  placement="auto"
                   value={String(currentPageSize)}
                   onValueChange={(val) => {
                     handlePageSizeChange(Number(val));
@@ -1004,30 +1017,32 @@ export function DataTable<T>({
                     { value: "50", label: "50" },
                     { value: "100", label: "100" },
                   ]}
-                  className="h-8 text-xs font-semibold rounded-lg bg-white border-stone-200/90 shadow-2xs hover:bg-stone-50"
-                  dropdownClassName="!min-w-[74px] w-[74px] bg-white border border-stone-200 shadow-2xl rounded-xl z-[100] p-1"
+                  className="h-8 px-2.5 text-xs font-semibold rounded-lg bg-white border-stone-200/90 text-stone-700 shadow-2xs hover:bg-stone-50"
+                  dropdownClassName="!min-w-[78px] w-[78px] bg-white border border-stone-200 shadow-2xl rounded-xl z-[100] p-1"
                   aria-label="Rows per page"
                 />
               </div>
             </div>
           </div>
-          <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
+          <div className="flex items-center gap-1.5 self-end sm:self-auto shrink-0">
             <button
               type="button"
               onClick={() => handlePageChange(Math.max(1, safePage - 1))}
               disabled={safePage <= 1}
-              className="grid h-8 w-8 place-items-center rounded-lg border border-stone-200 bg-white text-xs font-semibold text-stone-700 transition-colors hover:bg-stone-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-stone-200/90 bg-white text-stone-700 transition-colors hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer shadow-2xs"
+              aria-label="Previous page"
             >
               <ChevronLeft className="h-4 w-4" />
             </button>
-            <span className="text-xs font-semibold text-stone-700 px-1">
+            <span className="text-xs font-semibold text-stone-700 px-2 min-w-[3rem] text-center">
               {safePage} / {totalPages}
             </span>
             <button
               type="button"
               onClick={() => handlePageChange(Math.min(totalPages, safePage + 1))}
               disabled={safePage >= totalPages}
-              className="grid h-8 w-8 place-items-center rounded-lg border border-stone-200 bg-white text-xs font-semibold text-stone-700 transition-colors hover:bg-stone-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-stone-200/90 bg-white text-stone-700 transition-colors hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer shadow-2xs"
+              aria-label="Next page"
             >
               <ChevronRight className="h-4 w-4" />
             </button>
@@ -1581,11 +1596,11 @@ export function ReportError({ message, onRetry }: { message: string; onRetry?: (
   );
 }
 
-/** "1 Oct 2026 – 30 Oct 2026 · 30 days" under the page title. */
+/** "01 Nov 2026 – 20 Nov 2026 · 20 days" under the page title. */
 export function RangeCaption({ from, to, days: span }: { from: string; to: string; days: number }) {
   return (
     <p className="text-xs text-neutral-500">
-      {dateLabel(from)} – {dateLabel(to)} · {span} day{span === 1 ? "" : "s"}
+      {formatDateRange(from, to)} · {span} day{span === 1 ? "" : "s"}
     </p>
   );
 }

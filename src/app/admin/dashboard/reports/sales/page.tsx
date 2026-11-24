@@ -28,6 +28,7 @@ import {
   TrendChart,
   compareLabelFor,
   count,
+  dateLabel,
   money,
   moneyExact,
 } from "@/features/reports/components/report-ui";
@@ -56,8 +57,8 @@ function breakdownColumns(firstHeader: string, showUnits = true): Column<SalesBr
 const dailyBreakdownColumns: Column<SalesTrendPoint>[] = [
   {
     header: "Date",
-    cell: (r) => <span className="font-semibold text-stone-900">{r.bucket}</span>,
-    csv: (r) => r.bucket,
+    cell: (r) => <span className="font-semibold text-stone-900">{dateLabel(r.bucket)}</span>,
+    csv: (r) => dateLabel(r.bucket),
   },
   {
     header: "Orders",
