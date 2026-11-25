@@ -1,117 +1,97 @@
-"use client";
-
-import { use } from "react";
-import { useCustomerProduct } from "@/features/customers/hooks/use-customer-catalog";
-import { ProductDetails } from "@/features/products/components/ProductDetails";
-import { LoadingState } from "@/components/ui/loading-state";
-import { ErrorState } from "@/components/ui/error-state";
-import { PageContainer } from "@/components/layout/PageContainer";
-import { Breadcrumb } from "@/components/ui/breadcrumb";
-
+import type { Metadata } from "next";
+import { db } from "@/lib/db/prisma";
+import { ProductDetailClient } from "./ProductDetailClient";
 
 interface ProductDetailPageProps {
   params: Promise<{ slug: string }>;
 }
 
-function ProductDetailSkeleton() {
-  return (
-    <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-start animate-pulse">
-      {/* Gallery Skeleton */}
-      <div className="lg:col-span-6 space-y-4">
-        <div className="aspect-square w-full rounded-2xl border border-theme-border overflow-hidden skeleton-shimmer" />
-        <div className="flex gap-3">
-          {[1, 2, 3, 4].map((i) => (
-            <div
-              key={i}
-              className="w-16 h-16 rounded-xl border border-theme-border overflow-hidden skeleton-shimmer shrink-0"
-            />
-          ))}
-        </div>
-      </div>
+export async function generateMetadata({
+  params,
+}: ProductDetailPageProps): Promise<Metadata> {
+  const { slug } = await params;
 
-      {/* Details Skeleton */}
-      <div className="lg:col-span-6 space-y-6">
-        <div className="space-y-2.5">
-          <div className="h-4 w-28 rounded-md skeleton-shimmer" />
-          <div className="h-8 w-3/4 rounded-xl skeleton-shimmer" />
-          <div className="h-6 w-36 rounded-lg skeleton-shimmer" />
-        </div>
+  try {
+    const product = await db.product.findFirst({
+      where: {
+        OR: [{ uuid: slug }, { slug: slug }],
+        isActive: true,
+        deleted_at: null,
+      },
+      select: {
+        name: true,
+        images: {
+          where: { is_active: true },
+          orderBy: [{ isPrimary: "desc" }, { sortOrder: "asc" }],
+          select: { image_url: true, altText: true },
+          take: 1,
+        },
+        variants: {
+          where: { isActive: true, deleted_at: null },
+          select: {
+            description: true,
+            short_description: true,
+            product_variant_images: {
+              where: { is_active: true },
+              orderBy: [{ is_primary: "desc" }, { sort_order: "asc" }],
+              select: { image_url: true },
+              take: 1,
+            },
+          },
+          take: 1,
+        },
+      },
+    });
 
-        <div className="space-y-2 pt-2 border-t border-theme-border-subtle">
-          <div className="h-4 w-full rounded-md skeleton-shimmer" />
-          <div className="h-4 w-5/6 rounded-md skeleton-shimmer" />
-          <div className="h-4 w-2/3 rounded-md skeleton-shimmer" />
-        </div>
+    if (!product) {
+      return {
+        title: "Product Details",
+        description: "Explore authentic South Indian snacks and sweets from RithuSnacks.",
+      };
+    }
 
-        <div className="space-y-3 pt-2">
-          <div className="h-4 w-32 rounded-md skeleton-shimmer" />
-          <div className="flex gap-3">
-            {[1, 2, 3].map((i) => (
-              <div
-                key={i}
-                className="h-10 w-24 rounded-xl skeleton-shimmer"
-              />
-            ))}
-          </div>
-        </div>
+    const title = product.name;
+    const description =
+      product.variants[0]?.short_description ||
+      product.variants[0]?.description ||
+      `Buy fresh ${product.name} online from RithuSnacks. Authentic traditional South Indian recipe made with pure ingredients.`;
+    const imageUrl =
+      product.images[0]?.image_url ||
+      product.variants[0]?.product_variant_images[0]?.image_url ||
+      "/logos/logo.svg";
 
-        <div className="pt-4 flex gap-4">
-          <div className="h-12 w-28 rounded-xl skeleton-shimmer" />
-          <div className="h-12 flex-1 rounded-xl skeleton-shimmer" />
-          <div className="h-12 w-12 rounded-xl skeleton-shimmer shrink-0" />
-        </div>
-      </div>
-    </div>
-  );
+    return {
+      title,
+      description,
+      openGraph: {
+        title,
+        description,
+        type: "website",
+        images: [
+          {
+            url: imageUrl,
+            alt: product.name,
+          },
+        ],
+      },
+      twitter: {
+        card: "summary_large_image",
+        title,
+        description,
+        images: [imageUrl],
+      },
+    };
+  } catch {
+    return {
+      title: "Product Details",
+      description: "Explore authentic South Indian snacks and sweets from RithuSnacks.",
+    };
+  }
 }
 
-export default function ProductDetailPage({ params }: ProductDetailPageProps) {
-  const { slug } = use(params);
-  const { data: product, isLoading, error, refetch } = useCustomerProduct(slug);
-
-  if (isLoading) {
-    return (
-      <PageContainer>
-        <div className="mt-6">
-          <ProductDetailSkeleton />
-        </div>
-      </PageContainer>
-    );
-  }
-
-  if (error) {
-    return (
-      <PageContainer>
-        <ErrorState
-          message="Failed to load product"
-          onRetry={() => refetch()}
-        />
-      </PageContainer>
-    );
-  }
-
-  if (!product) {
-    return (
-      <PageContainer>
-        <ErrorState message="Product not found" />
-      </PageContainer>
-    );
-  }
-
-  return (
-    <PageContainer>
-      <Breadcrumb
-        items={[
-          { label: "Products", href: "/products" },
-          ...(product.category
-            ? [{ label: product.category.name, href: `/categories/${product.category.id}` }]
-            : []),
-          { label: product.name },
-        ]}
-      />
-      <div className="mt-6">
-        <ProductDetails product={product} />
-      </div>
-    </PageContainer>
-  );
+export default async function ProductDetailPage({
+  params,
+}: ProductDetailPageProps) {
+  const { slug } = await params;
+  return <ProductDetailClient slug={slug} />;
 }

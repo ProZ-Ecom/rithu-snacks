@@ -3,6 +3,10 @@
  */
 let scriptLoadingPromise: Promise<boolean> | null = null;
 
+export const RAZORPAY_CHECKOUT_SCRIPT_URL =
+  process.env.NEXT_PUBLIC_RAZORPAY_CHECKOUT_URL ||
+  "https://checkout.razorpay.com/v1/checkout.js";
+
 export function loadRazorpayScript(): Promise<boolean> {
   if (typeof window === "undefined") {
     return Promise.resolve(false);
@@ -21,7 +25,7 @@ export function loadRazorpayScript(): Promise<boolean> {
   scriptLoadingPromise = new Promise<boolean>((resolve) => {
     // Check if script tag already exists
     const existingScript = document.querySelector<HTMLScriptElement>(
-      'script[src="https://checkout.razorpay.com/v1/checkout.js"]'
+      `script[src="${RAZORPAY_CHECKOUT_SCRIPT_URL}"]`
     );
 
     if (existingScript) {
@@ -31,7 +35,7 @@ export function loadRazorpayScript(): Promise<boolean> {
     }
 
     const script = document.createElement("script");
-    script.src = "https://checkout.razorpay.com/v1/checkout.js";
+    script.src = RAZORPAY_CHECKOUT_SCRIPT_URL;
     script.async = true;
     script.crossOrigin = "anonymous";
 

@@ -4,7 +4,7 @@ import { PolicyLayout } from "@/components/storefront/policy/PolicyLayout";
 import { FileText } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "Terms & Conditions | Rithu Snacks",
+  title: "Terms & Conditions",
   description:
     "Read the Terms & Conditions governing the use of the Rithu Snacks website, orders, payments, delivery, cancellations, and services.",
 };

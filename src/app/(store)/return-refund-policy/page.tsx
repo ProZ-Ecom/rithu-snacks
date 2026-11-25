@@ -3,7 +3,7 @@ import { PolicyLayout } from "@/components/storefront/policy/PolicyLayout";
 import { RotateCcw } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "Return & Refund Policy | Rithu Snacks",
+  title: "Return & Refund Policy",
   description:
     "Learn about Rithu Snacks return, replacement, cancellation, and refund policies for food and snack orders.",
 };

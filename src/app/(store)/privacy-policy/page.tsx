@@ -3,7 +3,7 @@ import { PolicyLayout } from "@/components/storefront/policy/PolicyLayout";
 import { Lock } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "Privacy Policy | Rithu Snacks",
+  title: "Privacy Policy",
   description:
     "Learn how Rithu Snacks collects, uses, protects, and manages customer information.",
 };

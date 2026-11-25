@@ -1,5 +1,9 @@
 import Razorpay from "razorpay";
 
+export function getRazorpayBaseUrl(): string {
+  return process.env.RAZORPAY_BASE_URL || "https://api.razorpay.com";
+}
+
 export function getRazorpayClient(): Razorpay {
   const key_id = process.env.RAZORPAY_KEY_ID;
   const key_secret = process.env.RAZORPAY_KEY_SECRET;
@@ -10,10 +14,17 @@ export function getRazorpayClient(): Razorpay {
     );
   }
 
-  return new Razorpay({
+  const client = new Razorpay({
     key_id,
     key_secret,
   });
+
+  const baseUrl = getRazorpayBaseUrl();
+  if (client && (client as any).api) {
+    (client as any).api.hostUrl = baseUrl;
+  }
+
+  return client;
 }
 
 export function getRazorpayPublicKey(): string {

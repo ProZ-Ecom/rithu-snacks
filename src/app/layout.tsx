@@ -14,6 +14,9 @@ const hanken = Hanken_Grotesk({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(
+    process.env.NEXT_PUBLIC_APP_URL || "https://rithusnacks.com"
+  ),
   icons: {
     icon: [
       { url: "/logos/logo.svg", type: "image/svg+xml" },
@@ -22,8 +25,16 @@ export const metadata: Metadata = {
     shortcut: "/logos/logo.svg",
     apple: "/logos/logo.svg",
   },
-  title: "RithuSnacks - Premium Snacks",
+  title: {
+    default: "RithuSnacks - Premium Snacks",
+    template: "%s | RithuSnacks",
+  },
   description: "Premium snacks delivered to your doorstep. Quality you can taste.",
+  openGraph: {
+    siteName: "RithuSnacks",
+    type: "website",
+    locale: "en_IN",
+  },
 };
 
 export default function RootLayout({
